@@ -105,7 +105,7 @@ LOAD /usr/lib/gcc/avr/4.1.0/avr4/libgcc.a
 .rela.plt
  *(.rela.plt)
 
-.text           0x00000000       0x40
+.text           0x00000000       0x92
  *(.vectors)
  .vectors       0x00000000       0x26 /usr/lib/gcc/avr/4.1.0/../../../../avr/lib/avr4/crtm8.o
                 0x00000000                __vectors
@@ -151,12 +151,12 @@ LOAD /usr/lib/gcc/avr/4.1.0/avr4/libgcc.a
                 0x00000034                __vector_10
                 0x00000034                __vector_16
                 0x00000034                __vector_18
- .text          0x00000036        0xa main.o
+ .text          0x00000036       0x5c main.o
                 0x00000036                __vector_1
                 0x0000003a                main
-                0x00000040                . = ALIGN (0x2)
+                0x00000092                . = ALIGN (0x2)
  *(.text.*)
-                0x00000040                . = ALIGN (0x2)
+                0x00000092                . = ALIGN (0x2)
  *(.fini9)
  *(.fini8)
  *(.fini7)
@@ -167,9 +167,9 @@ LOAD /usr/lib/gcc/avr/4.1.0/avr4/libgcc.a
  *(.fini2)
  *(.fini1)
  *(.fini0)
-                0x00000040                _etext = .
+                0x00000092                _etext = .
 
-.data           0x00800060        0x0 load address 0x00000040
+.data           0x00800060        0x0 load address 0x00000092
                 0x00800060                PROVIDE (__data_start, .)
  *(.data)
  *(.gnu.linkonce.d*)
@@ -182,8 +182,8 @@ LOAD /usr/lib/gcc/avr/4.1.0/avr4/libgcc.a
  *(.bss)
  *(COMMON)
                 0x00800060                PROVIDE (__bss_end, .)
-                0x00000040                __data_load_start = LOADADDR (.data)
-                0x00000040                __data_load_end = (__data_load_start + SIZEOF (.data))
+                0x00000092                __data_load_start = LOADADDR (.data)
+                0x00000092                __data_load_end = (__data_load_start + SIZEOF (.data))
 
 .noinit         0x00800060        0x0
                 0x00800060                PROVIDE (__noinit_start, .)
