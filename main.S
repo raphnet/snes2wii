@@ -3,7 +3,7 @@
 	
 	r4-r5: Nes/Snes controller latest read bytes (r4 filled first)
 	
-	r16: Temporary register for non-interrupt context
+	r6: Temporary register for non-interrupt context
 	r17: Loop counter for reading from controller
 	r18: Temporary storage while reading from controller
 
@@ -22,6 +22,10 @@
 #define IO_PORTB _SFR_IO_ADDR(PORTB)
 #define IO_DDRB _SFR_IO_ADDR(DDRB)
 #define IO_MCUCR _SFR_IO_ADDR(MCUCR)
+
+#define CLK_H_LATCH_H	0x30
+#define CLK_H_LATCH_L	0x20
+#define CLK_L_LATCH_L	0x00
 
 SIG_INTERRUPT0:
 	nop
@@ -75,35 +79,56 @@ main:
 	ldi r16, 0x02	/* 0000 0010 */ 
 	out IO_MCUCR, r16
 
+mainloop:
+	/* A real Snes polls the controller at 60hz */
+
+	rcall readSnes
+	rcall delay_16ms
+
+	rjmp mainloop
+
+
+	/*******************************************************
+	 * Subroutine which reads the status of an SNES controller
+	 * into the r4 and r5 registers.
+	 *******************************************************/
 readSnes:
-	ldi r16, 0x30	/* Clk high, Latch high */
-	out IO_PORTC, r16
+	push r17
 
-	rcall delay_6us_loop
-	rcall delay_6us_loop
-	
-	ldi r16, 0x20	/* Clk high, Latch low */
+	/* Latch the buttons output into the shift register */
+	ldi r16, CLK_H_LATCH_H
 	out IO_PORTC, r16
-	
+	rcall delay_6us_loop
+	rcall delay_6us_loop	
+	ldi r16, CLK_H_LATCH_L
+	out IO_PORTC, r16	
 	rcall delay_6us_loop
 
+	/* Generate 8 clock pulses, reading data on the falling edge */
+	rcall r8bits
+	mov r4, r18
+	rcall r8bits
+	mov r5, r18
+
+	pop r17
 	ret
 
-	/* Subroutine which reads 8 bits from the controller
+	/*****************************************************
+	 * Subroutine which reads 8 bits from the controller
 	 * Uses r17, r16
 	 * Returns result in r18
-	 */
+	 *****************************************************/
 r8bits:
 	ldi r17, 8
 	clr r18
 r8bits_lp:
 	lsl r18
 
-	ldi r16, 0x00	/* Clk low, Latch low */
+	ldi r16, CLK_L_LATCH_L
 	out IO_PORTC, r16
 
 	in r16, IO_PINC
-	andi r16, 0x08
+	andi r16, 0x08	/* mask the data bit */
 	lsr r16
 	lsr r16
 	lsr r16
@@ -111,7 +136,7 @@ r8bits_lp:
 
 	rcall delay_6us_loop
 
-	ldi r16, 0x20	/* Clk high, Latch low */
+	ldi r16, CLK_H_LATCH_L
 	out IO_PORTC, r16
 
 	rcall delay_6us_loop
@@ -121,7 +146,9 @@ r8bits_lp:
 	
 	ret
 
-	/* Subroutine which busy-loops for 6 microseconds (at 12 mhz) */
+	/*************************************************************
+	 * Subroutine which busy-loops for 6 microseconds (at 12 mhz)
+	 *************************************************************/
 delay_6us:
 	/* At 12 Mhz, 1us is 12 cycle so 6 us is 72 cycles... */
 	ldi r16, 22
@@ -130,6 +157,33 @@ delay_6us_loop:
 	brne delay_6us_loop	/* 2 when taken */
 	ret
 
-
+	
+	/*************************************************************
+	 * Subroutine which busy-loops for 16 milliseconds (at 12 mhz)
+	 *************************************************************/
+delay_16ms: 
+	push r17
+	/* or 16 000 us. We need to waste 192000 cycles.
+	  Inner loop here has approx 2550 cycles. 192000/2550 = 75 so
+	  we need to run it 75 times. */
+	ldi r17, 75
+	ldi r16, 0xff
+delay_16ms_lp:
+	dec r17
+	breq delay_16ms_done
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	dec r16
+	brne delay_16ms_lp
+delay_16ms_done:
+	pop r17
+	ret
+	
 
 
