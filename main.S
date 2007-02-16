@@ -11,9 +11,13 @@
 
 
 	r1: SREG backup in interrupt
+	r2: return value for interrupt subs
 	r19: Temporary register for interrupt context
 	r20: Temporary register for interrupt context
 	r23: Bit Counter for interrupt context
+
+	r3: Set to non-zero after each interrupt, used to read from the slave
+		controller immediately after each interrupt.
 */
 
 #include <avr/io.h>
@@ -29,18 +33,22 @@
 #define IO_SREG	_SFR_IO_ADDR(SREG)
 #define IO_PORTD _SFR_IO_ADDR(PORTD)
 #define IO_DDRD _SFR_IO_ADDR(DDRD)
+#define IO_PIND	_SFR_IO_ADDR(PIND)
 #define IO_PORTC _SFR_IO_ADDR(PORTC)
 #define IO_DDRC _SFR_IO_ADDR(DDRC)
 #define IO_PINC _SFR_IO_ADDR(PINC)
 #define IO_PORTB _SFR_IO_ADDR(PORTB)
 #define IO_DDRB _SFR_IO_ADDR(DDRB)
 #define IO_MCUCR _SFR_IO_ADDR(MCUCR)
+#define IO_GICR	_SFR_IO_ADDR(GICR)
 
 #define CLK_H_LATCH_H	0x30
 #define CLK_H_LATCH_L	0x20
 #define CLK_L_LATCH_L	0x00
 
-#define DEBUG_PORTD_BIT 0x
+#define DEBUG_PORTD_BIT 0x00	/* In PORTD */
+#define GC_DATA_BIT		0x02	/* in PORTD */
+#define GC_DATA_MASK	0x04	
 #define DATA_FALL_TIMEOUT	0x3f
 #define DATA_RAISE_TIMEOUT	0x3f
 
@@ -56,11 +64,22 @@ SIG_INTERRUPT0:
 readNextBit:
 	ldi r19, DATA_FALL_TIMEOUT	/* setup a timeout */
 waitFall:				
-	dec r19				/* 1 */
-	breq timeout		/* 1 */
-	in r20, IO_PORTD	/* 1 : read the input port */
-	andi r20, 0x04		/* 1 : isolate the input bit */
-	brne waitFall		/* 2 : if still high, loop */
+	dec r19					/* 1 */
+	breq timeout			/* 1 */
+	in r20, IO_PIND			/* 1 : read the input port */
+	andi r20, GC_DATA_MASK	/* 1 : isolate the input bit */
+	brne waitFall			/* 2 : if still high, loop */
+
+	/* When we first jump to 'fell' (when the interrupt
+	occurs), we have already wasted many cycles. Those
+	delays are there to compensate and make sure we
+	always sample the data line where we want. */
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
 fell:
 
 	/* Ok, so there is now a 0 on the wire. 
@@ -79,50 +98,174 @@ fell:
 	  adjusting the align_delay subroutine.
 	*/
 
-	cbi IO_PORTD, DEBUG_PORTD_BIT	/* 1 */
 	rcall align_delay	/* waste enough cycles to be aligned on cycle 32 */
-
-	in r19, IO_PORTD				/* read the input port */
 	sbi IO_PORTD, DEBUG_PORTD_BIT	/* DEBUG */
-	andi r19, 0x04					/* isolate the data bit */
-	st z+, r19						/* store the value */
+	in r20, IO_PIND				/* read the input port */
+	cbi IO_PORTD, DEBUG_PORTD_BIT	/* DEBUG */
+	andi r20, GC_DATA_MASK			/* isolate the data bit */
+	st z+, r20						/* store the value */
 
-	dec r23
+	dec r23					; One less bit to receive...
 	breq gotCommand
 
 	ldi r19, DATA_RAISE_TIMEOUT
 waitHigh:
 	dec r19
 	breq timeout
-	in r20, IO_PORTD
-	andi r20, 0x04
-	brne readNextBit
+	in r20, IO_PIND
+	andi r20, GC_DATA_MASK
+	breq waitHigh			; Still high? Keep looping
+
+	rjmp readNextBit
 
 	/* At this point, we have read a full 24bit command. A document
 	I found says that there is a 6ms second delay before a real gamecube
 	controller responds. That leaves us a lot of time :) */
 gotCommand:
+	ldi	r30, lo8(gc_rx_buf)
+	ldi r31, hi8(gc_rx_buf)
 
+	rcall conv8bytes8bits	/* places result in r2 */
+	ldi r19, 0x40
+	sub r19, r2
+	brne unknown_cmd;
+	
+	rcall conv8bytes8bits
+	ldi r19, 0x03
+	sub r19, r2
+	brne unknown_cmd
+	/*  note: Last byte not checked... it contains a bit for rumble motor.. I'm 
+	not sure about the others. I'd rather reply anyway than not doing it and
+	having the console beleiving the controller is gone or failing... 
+	rcall conv8bytes8bits
+	ldi r19, 0x02
+	*/
 
 
 
 timeout:
-	/* Todo: If we had read exactly 8 bits, check
-	for valid small commands (eg: detection) */
+	/* If we had received only 8 bits, the command is possibly getID+status. We
+	   _must_ respond to this if we want the console to detect us. 
 
+	   r23 is a count-down from 24 during the receive phase so it should
+	   contain a value of 16.. 
+	*/
+	ldi r19, 16
+	sub r19, r23 
+	brne interrupt_done
 
+	/* TODO TODO : Reply with the 24 bit controller ID + status */
 
-iterrupt_done:
+unknown_cmd:
+interrupt_done:
+	inc r3				; when r3 is non-zero, mainloop reads one time from the
+						; slave controller and clears this register.
 	out IO_SREG, r1
 	reti
 
-
 align_delay:
-	ldi r19, 6						/* 1 */
+	ldi r19, 3						/* 1 */
 lp634534:	
 	dec r19							/* 1 */
 	brne lp634534					/* 2 */
 	ret
+
+
+	/************************************************
+	* Send data using the N64/GC serial protocol which
+	* is as follows:
+	*   0          1
+	*     __        _____
+	* ____|       __|
+	* ^   ^ ^     ^ ^   ^
+	*  3us 1us    1us 3us
+	*
+	* To send a 1, the pin direction is set to input.
+	* To send a 0, the pin direction is set to output. 
+	*	(of course, it's value is preset to zero)
+	* 
+	* At 16 mhz, a 1us period is 16 cycles. Thus a 3us period
+	* is 48 cycles.
+	*
+	* Number of bits to send is passed in r23
+	* Z must point to first byte of data. Every byte
+	* represents one bit (programming laziness..). A logic
+	* 1 is sent when a byte is non-zero.
+	* Used registers: r19, r20
+	************************************************/
+sendGCData:
+
+lp_sendGCData_bits:
+	ld r19, z+
+	tst r19
+	brne send1
+	nop
+send0:
+	sbi IO_DDRD, GC_DATA_BIT	; Pull bus to 0 
+	
+	ldi r20, 15
+lp_send0_3us:
+	dec r20
+	brne lp_send0_3us
+	nop
+
+	cbi IO_DDRD, GC_DATA_BIT	; Release bus to 1
+
+	ldi r20, 2
+lp_send0_1us:
+	dec r20
+	brne lp_send0_1us
+
+	dec r23
+	brne lp_sendGCData_bits
+
+	ret
+
+send1:
+	sbi IO_DDRD, GC_DATA_BIT	; Pull bus to 0
+
+	ldi r20, 4
+lp_send1_1us:
+	dec r20
+	brne lp_send1_1us
+	nop
+	nop
+	
+	cbi IO_DDRD, GC_DATA_BIT	; Release bus to 1
+
+	ldi r20, 12
+lp_send1_3us:
+	dec r20
+	brne lp_send1_3us
+	nop
+	nop
+
+	dec r23
+	brne lp_sendGCData_bits
+
+	ret
+
+	/*************************************************
+	* Read 8 bytes starting where Z currently points.
+	* Non-zero bytes are considered 1, other 0. Result
+	* is placed in r2. First byte corresponds to most
+	* significative bit.
+	* Uses: r23, r19
+	*************************************************/
+conv8bytes8bits:
+	ldi r23, 8
+	clr r2
+lp1664:
+	lsl r2
+	ld r19, z+
+	tst r19
+	breq lp1664
+	mov r19,r2
+	ori r19, 0x01
+	mov r2, r19
+	dec r23
+	brne lp1664
+	ret	
 
 
 	/*  -- PORTC --
@@ -143,7 +286,7 @@ lp634534:
 	 *
 	 * -- PORTD --
 	 * 2: Int0 (GC Data In (simulated open collector by toggling direction))
-	 * 1: NC or Shorted with 2
+	 * 1: NC or Shorted with 0
 	 * 0: Debug bit
 	 */
 main:
@@ -172,18 +315,62 @@ main:
 	   purposes. It is set as output, no pullup.  */
 	ldi r16, 0xfa 	/* 1111 1010 */
 	out IO_PORTD, r16
-	ldi r16, 0x01
+	ldi r16, 0x01	/* 0000 0001 */
 	out IO_DDRD, r16
 
 	/* Configure external interrupt INT0 (falling edge) */
 	ldi r16, 0x02	/* 0000 0010 */ 
 	out IO_MCUCR, r16
+	ldi r16, 0x40	/* INT0 set */
+	out IO_GICR, r16
 
+#if 0
+	/********* TESTING ********/
+	ldi	r30, lo8(gc_tx_buf)
+	ldi r31, hi8(gc_tx_buf)
+	ldi r16, 0x01	; 1
+	st z+, r16
+	ldi r16, 0x01	; 2
+	st z+, r16
+	ldi r16, 0x01	; 3
+	st z+, r16
+	ldi r16, 0x00	; 4
+	st z+, r16
+	ldi r16, 0x00	; 5
+	st z+, r16
+	ldi r16, 0x01	; 6
+	st z+, r16
+	ldi r16, 0x00	; 7
+	st z+, r16
+	ldi r16, 0x00	; 8
+	st z+, r16
+
+lp123123:
+	ldi	r30, lo8(gc_tx_buf)
+	ldi r31, hi8(gc_tx_buf)
+	ldi r23, 8
+	rcall sendGCData 
+	rcall delay_16ms
+	rjmp lp123123
+
+#endif
+	
+	sei
 mainloop:
-	/* A real Snes polls the controller at 60hz */
+	/* A real Snes polls the controller at 60hz. But we
+	poll the controller after each interrupt (our only
+	interrupt source is when the gamecube sends us a
+	command. */
+
+	tst r3				; set inside int handler
+	breq mainloop;
+	
+	clr r3
 
 	rcall readSnes
-	rcall delay_16ms
+	rcall delay_16ms	; dont read the controller again too soon?
+						; just in case some non-standard snes compatible
+						; controller does not like this.
 
 	rjmp mainloop
 
