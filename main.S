@@ -52,6 +52,10 @@
 #define DATA_FALL_TIMEOUT	0x3f
 #define DATA_RAISE_TIMEOUT	0x3f
 
+/* Useful */
+#define zl	r30
+#define zh	r31
+
 SIG_INTERRUPT0:
 	in r1, IO_SREG
 	ldi	r30, lo8(gc_rx_buf)
@@ -124,7 +128,7 @@ waitHigh:
 gotCommand:
 	ldi	r30, lo8(gc_rx_buf)
 	ldi r31, hi8(gc_rx_buf)
-
+#if 0
 	rcall conv8bytes8bits	/* places result in r2 */
 	ldi r19, 0x40
 	sub r19, r2
@@ -134,6 +138,7 @@ gotCommand:
 	ldi r19, 0x03
 	sub r19, r2
 	brne unknown_cmd
+#endif
 	/*  note: Last byte not checked... it contains a bit for rumble motor.. I'm 
 	not sure about the others. I'd rather reply anyway than not doing it and
 	having the console beleiving the controller is gone or failing... 
@@ -141,7 +146,7 @@ gotCommand:
 	ldi r19, 0x02
 	*/
 
-
+	rjmp buildAndSendPacket
 
 timeout:
 	/* If we had received only 8 bits, the command is possibly getID+status. We
@@ -155,6 +160,7 @@ timeout:
 	brne interrupt_done
 
 	/* TODO TODO : Reply with the 24 bit controller ID + status */
+	rjmp buildAndSendIdPacket
 
 unknown_cmd:
 interrupt_done:
@@ -170,6 +176,124 @@ lp634534:
 	brne lp634534					/* 2 */
 	ret
 
+buildAndSendIdPacket:
+	rcall clrTxBuf
+	
+	/* My controller replies with this:
+		  00001001 00000000 00110011
+	*/
+	ldi r19, 1
+	ldi	zl, lo8(gc_tx_buf)
+	ldi zh, hi8(gc_tx_buf)
+	adiw zl, 4
+	st z, r19
+	adiw zl, 2
+	st z, r19
+	adiw zl, 10
+	st z+, r19
+	st z, r19
+	adiw zl, 2
+	st z+, r19
+	st z, r19
+
+	ldi	zl, lo8(gc_tx_buf)
+	ldi zh, hi8(gc_tx_buf)
+	ldi r23, 24
+	rcall sendGCData
+	rjmp interrupt_done
+
+
+
+	/******************************************
+		Build a 64bit data packet for the GC using
+		the latest values from the snes controller
+	******************************************/
+buildAndSendPacket:
+	rcall clrTxBuf
+
+	ldi	zl, lo8(gc_tx_buf)
+	ldi zh, hi8(gc_tx_buf)
+	adiw zl, 3 ; first 3 bits are always 0
+
+	ldi r19, 1	; used to set values in reply buffer
+
+	/* Test each button/direciton bit from the controller, and set the
+	  appropriate bytes in response. SNES bits are active low, GC bits are
+	  active high. */
+	sbrs r4, 4	/* SNES START */
+	st z, r19	/* GC START */
+	adiw zl, 1
+
+	sbrs r5, 6	/* SNES X */
+	st z, r19	/* GC Y */
+	adiw zl, 1
+
+	sbrs r5, 7	/* SNES A */
+	st z, r19	/* GC X */
+	adiw zl, 1
+
+	sbrs r4, 6	/* SNES Y */
+	st z, r19	/* GC B */
+	adiw zl, 1
+
+	sbrs r4, 7	/* SNES B */
+	st z, r19	/* GC A */
+	adiw zl, 1
+
+	st z+, r19	/* This is the first bit of the 2nd byte. Always 1 */
+
+	sbrs r5, 5	/* SNES L */
+	st z, r19	/* GC L */
+	adiw zl, 1
+
+	sbrs r5, 4	/* SNES R */
+	st z, r19	/* GC R */
+	adiw zl, 1
+
+	sbrs r4, 5	/* SNES SELECT */
+	st z, r19	/* GC Z */
+	adiw zl, 1
+
+	sbrs r4, 3	/* SNES UP */
+	st z, r19	/* GC UP */
+	adiw zl, 1
+
+	sbrs r4, 2	/* SNES DOWN */
+	st z, r19	/* GC DOWN */
+	adiw zl, 1
+
+	sbrs r4, 0	/* SNES RIGHT */
+	st z, r19	/* GC RIGHT */
+	adiw zl, 1
+
+	sbrs r4, 1	/* SNES LEFT */
+	st z, r19	/* GC LEFT */
+	adiw zl, 1
+
+	/* Send the packet */
+	ldi	zl, lo8(gc_tx_buf)
+	ldi zh, hi8(gc_tx_buf)
+	ldi r23, 64
+	rcall sendGCData
+	rjmp interrupt_done
+
+	/*********************************************
+	Clear the 64 bytes of the transmission buffer
+	FOR INTERRUPT CONTEXT
+	*********************************************/
+clrTxBuf:
+	ldi	zl, lo8(gc_tx_buf)
+	ldi zh, hi8(gc_tx_buf)
+
+	; start by clearing all the reply buffer
+	ldi r19, 64
+lp342:
+	clr r20
+	st z+, r20
+	dec r19
+	brne lp342
+
+	ret
 
 	/************************************************
 	* Send data using the N64/GC serial protocol which
@@ -362,10 +486,10 @@ mainloop:
 	interrupt source is when the gamecube sends us a
 	command. */
 
-	tst r3				; set inside int handler
-	breq mainloop;
+//	tst r3				; set inside int handler
+//	breq mainloop;
 	
-	clr r3
+//	clr r3
 
 	rcall readSnes
 	rcall delay_16ms	; dont read the controller again too soon?
@@ -476,5 +600,4 @@ delay_16ms_done:
 	pop r17
 	ret
 	
-
 
