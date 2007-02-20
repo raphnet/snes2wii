@@ -49,8 +49,8 @@
 #define DEBUG_PORTD_BIT 0x00	/* In PORTD */
 #define GC_DATA_BIT		0x02	/* in PORTD */
 #define GC_DATA_MASK	0x04	
-#define DATA_FALL_TIMEOUT	0x3f
-#define DATA_RAISE_TIMEOUT	0x3f
+#define DATA_FALL_TIMEOUT	0x5 /* Bad if <=2 */
+#define DATA_RAISE_TIMEOUT	0x7 /* Bad if <=3 */
 
 /* Useful */
 #define zl	r30
@@ -149,17 +149,18 @@ gotCommand:
 	rjmp buildAndSendPacket
 
 timeout:
-	/* If we had received only 8 bits, the command is possibly getID+status. We
+	/* If we had received only 9 bits, the command is possibly getID+status. We
 	   _must_ respond to this if we want the console to detect us. 
 
 	   r23 is a count-down from 24 during the receive phase so it should
-	   contain a value of 16.. 
+	   contain a value of 15.. 
 	*/
-	ldi r19, 16
+	ldi r19, 15
 	sub r19, r23 
 	brne interrupt_done
 
-	/* TODO TODO : Reply with the 24 bit controller ID + status */
+	/* TODO : Get ID + Status command is 0x00 + 1 stop bit. Check before
+	replying... */
 	rjmp buildAndSendIdPacket
 
 unknown_cmd:
@@ -180,25 +181,29 @@ buildAndSendIdPacket:
 	rcall clrTxBuf
 	
 	/* My controller replies with this:
-		  00001001 00000000 00110011
+
+		  [   Device ID   ] [status] 
+		  00001001 00000000 00100000 1
+		      ^  ^                   ^
+			  |  |                   +--- Stop bit
+			  |  +-- 0: non standard controller, 1: Dolphin standard controller
+			  +----- 0: N64, 1: Dolphin
 	*/
 	ldi r19, 1
 	ldi	zl, lo8(gc_tx_buf)
 	ldi zh, hi8(gc_tx_buf)
 	adiw zl, 4
-	st z, r19
-	adiw zl, 2
-	st z, r19
-	adiw zl, 10
-	st z+, r19
-	st z, r19
-	adiw zl, 2
-	st z+, r19
-	st z, r19
+	st z, r19	; Dolphin
+	adiw zl, 3
+	st z, r19	; Dolphin
+	adiw zl, 11
+	st z, r19	; Mysterious status bit
+	adiw zl, 6
+	st z, r19	; Stop bit
 
 	ldi	zl, lo8(gc_tx_buf)
 	ldi zh, hi8(gc_tx_buf)
-	ldi r23, 24
+	ldi r23, 25
 	rcall sendGCData
 	rjmp interrupt_done
 
