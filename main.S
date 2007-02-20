@@ -49,8 +49,8 @@
 #define DEBUG_PORTD_BIT 0x00	/* In PORTD */
 #define GC_DATA_BIT		0x02	/* in PORTD */
 #define GC_DATA_MASK	0x04	
-#define DATA_FALL_TIMEOUT	0x5 /* Bad if <=2 */
-#define DATA_RAISE_TIMEOUT	0x7 /* Bad if <=3 */
+#define DATA_FALL_TIMEOUT	0x15
+#define DATA_RAISE_TIMEOUT	0x15 
 
 /* Useful */
 #define zl	r30
@@ -229,19 +229,19 @@ buildAndSendPacket:
 	st z, r19	/* GC START */
 	adiw zl, 1
 
-	sbrs r5, 6	/* SNES X */
+	sbrs r4, 6	/* SNES Y */
 	st z, r19	/* GC Y */
 	adiw zl, 1
 
-	sbrs r5, 7	/* SNES A */
+	sbrs r5, 6	/* SNES X */
 	st z, r19	/* GC X */
 	adiw zl, 1
 
-	sbrs r4, 6	/* SNES Y */
+	sbrs r4, 7	/* SNES B */
 	st z, r19	/* GC B */
 	adiw zl, 1
 
-	sbrs r4, 7	/* SNES B */
+	sbrs r5, 7	/* SNES A */
 	st z, r19	/* GC A */
 	adiw zl, 1
 
