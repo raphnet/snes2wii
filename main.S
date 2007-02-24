@@ -24,6 +24,8 @@
 
 .lcomm gc_rx_buf, 24
 .lcomm gc_tx_buf, 65	; reply is 64 bit + 1 stop bit
+.lcomm id_status, 25	; reply to 0000 0000 1 (0x00)
+.lcomm origins_buf, 81	; reply to 0100 0001 1 (0x41)
 
 .text
 .global main
@@ -53,6 +55,8 @@
 #define DATA_RAISE_TIMEOUT	0x15 
 
 /* Useful */
+#define yl	r28
+#define yh	r29
 #define zl	r30
 #define zh	r31
 
@@ -159,9 +163,17 @@ timeout:
 	sub r19, r23 
 	brne interrupt_done
 
-	/* TODO : Get ID + Status command is 0x00 + 1 stop bit. Check before
-	replying... */
-	rjmp buildAndSendIdPacket
+	ldi zl, lo8(gc_rx_buf)
+	ldi zh, hi8(gc_rx_buf)
+
+	; Commands: 0x00 = Get ID + Status, 0x40 = Get origins? 
+	adiw zl, 1
+	ld r19, z
+	tst r19
+	breq not_40
+	rjmp sendOriginsPacket
+not_40: ; probably 0x00
+	rjmp sendIdPacket
 
 unknown_cmd:
 interrupt_done:
@@ -177,36 +189,19 @@ lp634534:
 	brne lp634534					/* 2 */
 	ret
 
-buildAndSendIdPacket:
-	rcall clrTxBuf
-	
-	/* My controller replies with this:
-
-		  [   Device ID   ] [status] 
-		  00001001 00000000 00100000 1
-		      ^  ^                   ^
-			  |  |                   +--- Stop bit
-			  |  +-- 0: non standard controller, 1: Dolphin standard controller
-			  +----- 0: N64, 1: Dolphin
-	*/
-	ldi r19, 1
-	ldi	zl, lo8(gc_tx_buf)
-	ldi zh, hi8(gc_tx_buf)
-	adiw zl, 4
-	st z, r19	; Dolphin
-	adiw zl, 3
-	st z, r19	; Dolphin
-	adiw zl, 11
-	st z, r19	; Mysterious status bit
-	adiw zl, 6
-	st z, r19	; Stop bit
-
-	ldi	zl, lo8(gc_tx_buf)
-	ldi zh, hi8(gc_tx_buf)
+sendIdPacket:
+	ldi	zl, lo8(id_status)
+	ldi zh, hi8(id_status)
 	ldi r23, 25
 	rcall sendGCData
 	rjmp interrupt_done
 
+sendOriginsPacket:
+	ldi	zl, lo8(origins_buf)
+	ldi zh, hi8(origins_buf)
+	ldi r23, 81
+	rcall sendGCData
+	rjmp interrupt_done
 
 
 	/******************************************
@@ -214,8 +209,6 @@ buildAndSendIdPacket:
 		the latest values from the snes controller
 	******************************************/
 buildAndSendPacket:
-	rcall clrTxBuf
-
 	ldi	zl, lo8(gc_tx_buf)
 	ldi zh, hi8(gc_tx_buf)
 	adiw zl, 3 ; first 3 bits are always 0
@@ -225,87 +218,52 @@ buildAndSendPacket:
 	/* Test each button/direciton bit from the controller, and set the
 	  appropriate bytes in response. SNES bits are active low, GC bits are
 	  active high. */
-	sbrs r4, 4	/* SNES START */
-	st z, r19	/* GC START */
-	adiw zl, 1
-
-	sbrs r4, 6	/* SNES Y */
-	st z, r19	/* GC Y */
-	adiw zl, 1
-
-	sbrs r5, 6	/* SNES X */
-	st z, r19	/* GC X */
-	adiw zl, 1
-
-	sbrs r4, 7	/* SNES B */
-	st z, r19	/* GC B */
-	adiw zl, 1
-
-	sbrs r5, 7	/* SNES A */
-	st z, r19	/* GC A */
-	adiw zl, 1
-
+	ldi r19, (1<<4)	/* SNES START */
+	and r19, r4
+		st z+, r19	/* GC START */
+	ldi r19, (1<<6) /* SNES Y */
+	and r19, r4
+		st z+, r19	/* GC Y */
+	ldi r19, (1<<6)	/* SNES X */
+	and r19, r5
+		st z+, r19	/* GC X */
+	ldi r19, (1<<7) /* SNES B */
+	and r19, r4
+		st z+, r19	/* GC B */
+	ldi r19, (1<<7)	/* SNES A */
+	and r19, r5
+		st z+, r19	/* GC A */
 	st z+, r19	/* This is the first bit of the 2nd byte. Always 1 */
 
-	sbrs r5, 5	/* SNES L */
-	st z, r19	/* GC L */
-	adiw zl, 1
-
-	sbrs r5, 4	/* SNES R */
-	st z, r19	/* GC R */
-	adiw zl, 1
-
-	sbrs r4, 5	/* SNES SELECT */
-	st z, r19	/* GC Z */
-	adiw zl, 1
-
-	sbrs r4, 3	/* SNES UP */
-	st z, r19	/* GC UP */
-	adiw zl, 1
-
-	sbrs r4, 2	/* SNES DOWN */
-	st z, r19	/* GC DOWN */
-	adiw zl, 1
-
-	sbrs r4, 0	/* SNES RIGHT */
-	st z, r19	/* GC RIGHT */
-	adiw zl, 1
-
-	sbrs r4, 1	/* SNES LEFT */
-	st z, r19	/* GC LEFT */
-	adiw zl, 1
-
-	/* Set the stop bit to 1 */
-	ldi	zl, lo8(gc_tx_buf)
-	ldi zh, hi8(gc_tx_buf)
-	adiw zl, 32
-	adiw zl, 32
-	st z, r19	/* Stop bit. Always 1 */
-
+	ldi r19, (1<<5)	/* SNES L */
+	and r19, r5
+		st z+, r19	/* GC L */
+	ldi r19, (1<<4)	/* SNES R */
+	and r19, r5
+		st z+, r19	/* GC R */
+	ldi r19, (1<<5)	/* SNES SELECT */
+	and r19, r4
+		st z+, r19	/* GC Z */
+	ldi r19, (1<<3)	/* SNES UP */
+	and r19, r4
+		st z+, r19	/* GC UP */
+	ldi r19, (1<<2)	/* SNES DOWN */
+	and r19, r4
+		st z+, r19
+	ldi r19, (1<<0)	/* SNES RIGHT */
+	and r19, r4
+		st z+, r19	/* GC RIGHT */
+	ldi r19, (1<<1)	/* SNES LEFT */
+	and r19, r4
+		st z+, r19
+	
 	/* Send the packet */
 	ldi	zl, lo8(gc_tx_buf)
 	ldi zh, hi8(gc_tx_buf)
-	ldi r23, 64
+	ldi r23, 65
 	rcall sendGCData
 	rjmp interrupt_done
 
-	/*********************************************
-	Clear the 64 bytes of the transmission buffer
-	FOR INTERRUPT CONTEXT
-	*********************************************/
-clrTxBuf:
-	ldi	zl, lo8(gc_tx_buf)
-	ldi zh, hi8(gc_tx_buf)
-
-	; start by clearing all the reply buffer
-	ldi r19, 65
-lp342:
-	clr r20
-	st z+, r20
-	dec r19
-	brne lp342
-
-	ret
 
 	/************************************************
 	* Send data using the N64/GC serial protocol which
@@ -460,37 +418,11 @@ main:
 	ldi r16, 0x40	/* INT0 set */
 	out IO_GICR, r16
 
-#if 0
-	/********* TESTING ********/
-	ldi	r30, lo8(gc_tx_buf)
-	ldi r31, hi8(gc_tx_buf)
-	ldi r16, 0x01	; 1
-	st z+, r16
-	ldi r16, 0x01	; 2
-	st z+, r16
-	ldi r16, 0x01	; 3
-	st z+, r16
-	ldi r16, 0x00	; 4
-	st z+, r16
-	ldi r16, 0x00	; 5
-	st z+, r16
-	ldi r16, 0x01	; 6
-	st z+, r16
-	ldi r16, 0x00	; 7
-	st z+, r16
-	ldi r16, 0x00	; 8
-	st z+, r16
+	rcall clr_precooked_buffers
+	rcall build_id_packet
+	rcall build_origins_packet
+	rcall initReplyBuf
 
-lp123123:
-	ldi	r30, lo8(gc_tx_buf)
-	ldi r31, hi8(gc_tx_buf)
-	ldi r23, 8
-	rcall sendGCData 
-	rcall delay_16ms
-	rjmp lp123123
-
-#endif
-	
 	sei
 mainloop:
 	/* A real Snes polls the controller at 60hz. But we
@@ -498,10 +430,10 @@ mainloop:
 	interrupt source is when the gamecube sends us a
 	command. */
 
-//	tst r3				; set inside int handler
-//	breq mainloop;
+	tst r3				; set inside int handler
+	breq mainloop;
 	
-//	clr r3
+	clr r3
 
 	rcall readSnes
 	rcall delay_16ms	; dont read the controller again too soon?
@@ -551,6 +483,7 @@ r8bits_lp:
 	out IO_PORTC, r16
 
 	in r16, IO_PINC
+	com r16	/* snes active low, make bit active high */
 	andi r16, 0x08	/* mask the data bit */
 	lsr r16
 	lsr r16
@@ -612,4 +545,125 @@ delay_16ms_done:
 	pop r17
 	ret
 	
+	/********************************************
+		Uses r19, Z
+	*/
+build_id_packet:
+	/* My controller replies with this:
+
+		  [   Device ID   ] [status] 
+		  00001001 00000000 00100000 1
+		      ^  ^                   ^
+			  |  |                   +--- Stop bit
+			  |  +-- 0: non standard controller, 1: Dolphin standard controller
+			  +----- 0: N64, 1: Dolphin
+	*/
+	ldi r19, 1
+	ldi	zl, lo8(id_status)
+	ldi zh, hi8(id_status)
+	adiw zl, 4
+	st z, r19	; Dolphin
+	adiw zl, 3
+	st z, r19	; Dolphin
+	adiw zl, 11
+	st z, r19	; Mysterious status bit
+	adiw zl, 6
+	st z, r19	; Stop bit
+
+	ret
+
+build_origins_packet:
+	; When Wii sends 0100 0001 1, my gc controller replies:
+	; 0000 0000 1000 0000 1000 0011 0111 1010 
+	; 1000 0001 0111 1110 0001 0110 0001 0011
+	; 0000 0000 0000 0000 1
+	;
+	ldi r19, 1
+	ldi zl, lo8(origins_buf)
+	ldi zh, hi8(origins_buf)
+	adiw zl, 8
+	st z, r19
+	adiw zl, 8
+	st z, r19
+	adiw zl, 6
+	st z+, r19
+	st z, r19
+	adiw zl, 2
+	st z+, r19
+	st z+, r19
+	st z+, r19
+	st z, r19
+	adiw zl, 2
+	st z, r19
+	adiw zl, 2
+	st z, r19
+	adiw zl, 7
+	st z, r19
+	adiw zl, 2
+	st z+, r19
+	st z+, r19
+	st z+, r19
+	st z+, r19
+	st z+, r19
+	st z, r19
+	adiw zl, 5
+	st z, r19
+	adiw zl, 2
+	st z+, r19
+	st z, r19
+	adiw zl, 5
+	st z, r19
+	adiw zl, 3
+	st z+, r19
+	st z, r19
+	;;;; 16 bit of 0's? 
+	adiw zl, 17
+	st z, r19 	; Stop bit
+
+	ret
+
+	/*********************************************
+	*********************************************/
+clr_precooked_buffers:
+	clr r20
+	
+	ldi	zl, lo8(id_status)
+	ldi zh, hi8(id_status)
+	
+	ldi r19, 25
+lp3412:
+	st z+, r20
+	dec r19
+	brne lp3412
+
+	ldi	zl, lo8(origins_buf)
+	ldi zh, hi8(origins_buf)
+	ldi r19, 81
+lp34128:
+	st z+, r20
+	dec r19
+	brne lp34128
+
+	ret
+
+	/**************************************************/
+initReplyBuf:
+	ldi	zl, lo8(gc_tx_buf)
+	ldi zh, hi8(gc_tx_buf)
+	ldi yl, lo8(origins_buf)
+	ldi yh, hi8(origins_buf)
+
+	; Copy the origins reply.
+	ldi r16, 64
+cp_lp:
+	ld r20, y+
+	st z+, r20
+	dec r16
+	brne cp_lp
+
+	; And add the final 1 (stop bit)
+	ldi r20, 1
+	st z+, r20
+
+	ret
 
