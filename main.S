@@ -23,7 +23,7 @@
 #include <avr/io.h>
 
 .lcomm gc_rx_buf, 24
-.lcomm gc_tx_buf, 64
+.lcomm gc_tx_buf, 65	; reply is 64 bit + 1 stop bit
 
 .text
 .global main
@@ -275,6 +275,12 @@ buildAndSendPacket:
 	st z, r19	/* GC LEFT */
 	adiw zl, 1
 
+	/* Set the stop bit to 1 */
+	ldi	zl, lo8(gc_tx_buf)
+	ldi zh, hi8(gc_tx_buf)
+	adiw zl, 64
+	st z, r19	/* Stop bit. Always 1 */
+
 	/* Send the packet */
 	ldi	zl, lo8(gc_tx_buf)
 	ldi zh, hi8(gc_tx_buf)
@@ -291,7 +297,7 @@ clrTxBuf:
 	ldi zh, hi8(gc_tx_buf)
 
 	; start by clearing all the reply buffer
-	ldi r19, 64
+	ldi r19, 65
 lp342:
 	clr r20
 	st z+, r20
