@@ -278,7 +278,8 @@ buildAndSendPacket:
 	/* Set the stop bit to 1 */
 	ldi	zl, lo8(gc_tx_buf)
 	ldi zh, hi8(gc_tx_buf)
-	adiw zl, 64
+	adiw zl, 32
+	adiw zl, 32
 	st z, r19	/* Stop bit. Always 1 */
 
 	/* Send the packet */
