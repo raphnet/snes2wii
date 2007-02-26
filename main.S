@@ -1,23 +1,27 @@
 /*
 	Register usages:
 
+------ read only registers 
 	r0: Constant 0
 
+------ registers shared between interrupt and non-interrupt context
+	r3: Set to non-zero after each interrupt, used to read from the slave
+		controller immediately after each interrupt.
 	r4-r5: Nes/Snes controller latest read bytes (r4 filled first)
-	
+
+------ registers for non-interrupt context
+	r2: Contains 0 in snes mode, 1 in nes mode
 	r16: Temporary register for non-interrupt context
 	r17: Loop counter for reading from controller
 	r18: Temporary storage while reading from controller
 
 
-	r1: SREG backup in interrupt
-	r2: return value for interrupt subs
+------ Interrupt context registers (some are used before enabling interrupts though)
+	r1: SREG backup in interrupt. Faster than pushing it to stack.
 	r19: Temporary register for interrupt context
 	r20: Temporary register for interrupt context
 	r23: Bit Counter for interrupt context
 
-	r3: Set to non-zero after each interrupt, used to read from the slave
-		controller immediately after each interrupt.
 */
 
 #include <avr/io.h>
@@ -132,22 +136,10 @@ waitHigh:
 gotCommand:
 	ldi	r30, lo8(gc_rx_buf)
 	ldi r31, hi8(gc_rx_buf)
-#if 0
-	rcall conv8bytes8bits	/* places result in r2 */
-	ldi r19, 0x40
-	sub r19, r2
-	brne unknown_cmd;
-	
-	rcall conv8bytes8bits
-	ldi r19, 0x03
-	sub r19, r2
-	brne unknown_cmd
-#endif
+
 	/*  note: Last byte not checked... it contains a bit for rumble motor.. I'm 
 	not sure about the others. I'd rather reply anyway than not doing it and
 	having the console beleiving the controller is gone or failing... 
-	rcall conv8bytes8bits
-	ldi r19, 0x02
 	*/
 
 	rjmp buildAndSendPacket
@@ -338,29 +330,6 @@ lp_send1_3us:
 	brne lp_sendGCData_bits
 
 	ret
-
-	/*************************************************
-	* Read 8 bytes starting where Z currently points.
-	* Non-zero bytes are considered 1, other 0. Result
-	* is placed in r2. First byte corresponds to most
-	* significative bit.
-	* Uses: r23, r19
-	*************************************************/
-conv8bytes8bits:
-	ldi r23, 8
-	clr r2
-lp1664:
-	lsl r2
-	ld r19, z+
-	tst r19
-	breq lp1664
-	mov r19,r2
-	ori r19, 0x01
-	mov r2, r19
-	dec r23
-	brne lp1664
-	ret	
-
 
 	/*  -- PORTC --
 	 * 7: NC
