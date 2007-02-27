@@ -10,7 +10,7 @@
 	r4-r5: Nes/Snes controller latest read bytes (r4 filled first)
 
 ------ registers for non-interrupt context
-	r2: Contains 0 in snes mode, 1 in nes mode
+	r2: Contains 0 in snes mode, non-zero in nes mode
 	r16: Temporary register for non-interrupt context
 	r17: Loop counter for reading from controller
 	r18: Temporary storage while reading from controller
@@ -45,6 +45,7 @@
 #define IO_PINC _SFR_IO_ADDR(PINC)
 #define IO_PORTB _SFR_IO_ADDR(PORTB)
 #define IO_DDRB _SFR_IO_ADDR(DDRB)
+#define IO_PINB	_SFR_IO_ADDR(PINB)
 #define IO_MCUCR _SFR_IO_ADDR(MCUCR)
 #define IO_GICR	_SFR_IO_ADDR(GICR)
 
@@ -387,6 +388,30 @@ main:
 	ldi r16, 0x40	/* INT0 set */
 	out IO_GICR, r16
 
+	/* Read jumpers. 
+	  PB0: Common
+	  PB1: JP1
+	  PB2: JP2
+	*/
+	sbi IO_DDRB, 0		; put a '1' on
+	cbi IO_PORTB, 0		; the common pin.
+	cbi IO_DDRB, 1		; setup JP1 and
+	cbi IO_DDRB, 2		; JP2 as inputs
+	sbi IO_PORTB, 1		; Enable JP1 pull-up
+	sbi IO_PORTB, 2		; Enable JP2 pull-up
+	nop
+	nop
+	nop
+	/* At the moment, only JP1 matters. 
+	   JP1 open(high) : Snes
+	   JP1 close(low) : Nes
+	*/
+	ldi r16, 0x02	; mask for PB1 (JP1)
+	in r2, IO_PINB
+	com r2
+	and r2, r16		; isolate the bit.
+	; Now r2 contains 0 in snes mode, 0x02 in nes mode.
+
 	rcall clr_precooked_buffers
 	rcall build_id_packet
 	rcall build_origins_packet
@@ -403,21 +428,70 @@ mainloop:
 	breq mainloop;
 	
 	clr r3
+	
+	tst r2			; ==0 snes mode, !=0 nes mode
+	breq doSnes
+	
+	rcall readNes
+	rjmp dly
 
+doSnes:
 	rcall readSnes
+dly:
 	rcall delay_16ms	; dont read the controller again too soon?
 						; just in case some non-standard snes compatible
 						; controller does not like this.
 
 	rjmp mainloop
 
+	/*******************************************************
+	 * Subroutine which reads the status of a NES controller
+	 * into the r4 and r5 registers, presenting the bits
+	 * as if it was from a NES controller.
+	 ******************************************************/
+readNes:
+	push r17 ; for r8bits which uses it
+
+
+	/* Latch the buttons output into the shift register */
+	ldi r16, CLK_H_LATCH_H
+	out IO_PORTC, r16
+	rcall delay_6us
+	rcall delay_6us
+	ldi r16, CLK_H_LATCH_L
+	out IO_PORTC, r16	
+	rcall delay_6us
+
+	/* Generate 8 clock pulses, reading data on the falling edge */
+	rcall r8bits ; result is in r18..
+	
+	/* NES sends data in this order:
+	 * A B Select Start Up Down Left Right
+	 * 
+	 * SNES sends data in this order:
+	 * B Y Select Start Up Down Left Right | A X L R 1 1 1 1 
+	 * |--------- R4 ----------------------|------ R5 -----|
+	 */
+	ldi r16, 0x80	; mask for bit 'A'
+	and r16, r18
+	mov r5, r16		; set or clear snes bit A
+
+	mov r16, r18
+	andi r16, 0x40	; isolate bit 'B'
+	lsl r16			; move bit 'B' for first place, for SNES
+	andi r18, 0x3f	; clear snes B and Y 
+	or r18, r16		; set/clear snes bit 'B'
+	mov r4, r18
+
+	pop r17
+	ret
 
 	/*******************************************************
 	 * Subroutine which reads the status of an SNES controller
 	 * into the r4 and r5 registers.
 	 *******************************************************/
 readSnes:
-	push r17
+	push r17 ; for r8bits which uses it
 
 	/* Latch the buttons output into the shift register */
 	ldi r16, CLK_H_LATCH_H
