@@ -1,28 +1,45 @@
-/*
-	Register usages:
-
------- read only registers 
-	r0: Constant 0
-
------- registers shared between interrupt and non-interrupt context
-	r3: Set to non-zero after each interrupt, used to read from the slave
-		controller immediately after each interrupt.
-	r4-r5: Nes/Snes controller latest read bytes (r4 filled first)
-
------- registers for non-interrupt context
-	r2: Contains 0 in snes mode, non-zero in nes mode
-	r16: Temporary register for non-interrupt context
-	r17: Loop counter for reading from controller
-	r18: Temporary storage while reading from controller
-
-
------- Interrupt context registers (some are used before enabling interrupts though)
-	r1: SREG backup in interrupt. Faster than pushing it to stack.
-	r19: Temporary register for interrupt context
-	r20: Temporary register for interrupt context
-	r23: Bit Counter for interrupt context
-
-*/
+;
+;	snes2wii: AVR Microcontroller firmware for converting SNES/NES controller
+;	          protocol to Nintendo Wii/Gamecube controller protocol.
+;    Copyright (C) 2007  Raphael Assenat <raph@raphnet.net>
+;
+;    This program is free software; you can redistribute it and/or modify
+;    it under the terms of the GNU General Public License as published by
+;    the Free Software Foundation; either version 2 of the License, or
+;    (at your option) any later version.
+;
+;    This program is distributed in the hope that it will be useful,
+;    but WITHOUT ANY WARRANTY; without even the implied warranty of
+;    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;    GNU General Public License for more details.
+;
+;    You should have received a copy of the GNU General Public License along
+;    with this program; if not, write to the Free Software Foundation, Inc.,
+;    51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+;
+;	------------------------------------------------------------------------   
+;
+;	Register usages:
+;
+;	------ read only registers 
+;		r0: Constant 0
+;
+;	------ registers shared between interrupt and non-interrupt context
+;		r3: Set to non-zero after each interrupt, used to read from the slave
+;		controller immediately after each interrupt.
+;		r4-r5: Nes/Snes controller latest read bytes (r4 filled first)
+;
+;	------ registers for non-interrupt context
+;		r2: Contains 0 in snes mode, non-zero in nes mode
+;		r16: Temporary register for non-interrupt context
+;		r17: Loop counter for reading from controller
+;		r18: Temporary storage while reading from controller
+;
+;	------ Interrupt context registers (some are used before enabling interrupts though)
+;		r1: SREG backup in interrupt. Faster than pushing it to stack.
+;		r19: Temporary register for interrupt context
+;		r20: Temporary register for interrupt context
+;		r23: Bit Counter for interrupt context
 
 #include <avr/io.h>
 
@@ -59,7 +76,7 @@
 #define DATA_FALL_TIMEOUT	0x15
 #define DATA_RAISE_TIMEOUT	0x15 
 
-/* Useful */
+; Useful
 #define yl	r28
 #define yh	r29
 #define zl	r30
@@ -69,24 +86,24 @@ SIG_INTERRUPT0:
 	in r1, IO_SREG
 	ldi	r30, lo8(gc_rx_buf)
 	ldi r31, hi8(gc_rx_buf)
-	ldi r23, 24				/* We will receive a 24bit command */
+	ldi r23, 24				; We will receive a 24bit command
 
 	rjmp fell
 
 
 readNextBit:
-	ldi r19, DATA_FALL_TIMEOUT	/* setup a timeout */
+	ldi r19, DATA_FALL_TIMEOUT	; setup a timeout
 waitFall:				
-	dec r19					/* 1 */
-	breq timeout			/* 1 */
-	in r20, IO_PIND			/* 1 : read the input port */
-	andi r20, GC_DATA_MASK	/* 1 : isolate the input bit */
-	brne waitFall			/* 2 : if still high, loop */
+	dec r19						; 1
+	breq timeout				; 1
+	in r20, IO_PIND				; 1 : read the input port
+	andi r20, GC_DATA_MASK		; 1 : isolate the input bit
+	brne waitFall				; 2 : if still high, loop
 
-	/* When we first jump to 'fell' (when the interrupt
-	occurs), we have already wasted many cycles. Those
-	delays are there to compensate and make sure we
-	always sample the data line where we want. */
+	; When we first jump to 'fell' (when the interrupt
+	; occurs), we have already wasted many cycles. Those
+	; delays are there to compensate and make sure we
+	; always sample the data line where we want.
 	nop
 	nop
 	nop
@@ -95,30 +112,28 @@ waitFall:
 	nop
 fell:
 
-	/* Ok, so there is now a 0 on the wire. 
-	  Worst case, we are at the 9th cycle.
-	  Best case, we are at the 3rd cycle.
+	; Ok, so there is now a 0 on the wire. 
+	;  Worst case, we are at the 9th cycle.
+	;  Best case, we are at the 3rd cycle.
+	;  Lets assumbe we are at cycle 6.
 
-	  Lets assumbe we are at cycle 6.
+	;  cycle: 1-16 16-32 32-48 48-64
+	;   high:  0     1     1     1
+	;   low:  0     0     0     1
 
-	  cycle: 1-16 16-32 32-48 48-64
-	   high:  0     1     1     1
-	    low:  0     0     0     1
+	;  I check the pin on the 32th cycle which is 
+	;  the safest place. Assuming we are on the 6th cycle,
+	;  we need to waste 26 cycles. This is done by
+	;  adjusting the align_delay subroutine.
 
-	  I check the pin on the 32th cycle which is 
-	  the safest place. Assuming we are on the 6th cycle,
-	  we need to waste 26 cycles. This is done by
-	  adjusting the align_delay subroutine.
-	*/
+	rcall align_delay				; waste enough cycles to be aligned on cycle 32
+	sbi IO_PORTD, DEBUG_PORTD_BIT	; DEBUG
+	in r20, IO_PIND					; read the input port
+	cbi IO_PORTD, DEBUG_PORTD_BIT	; DEBUG
+	andi r20, GC_DATA_MASK			; isolate the data bit
+	st z+, r20						; store the value
 
-	rcall align_delay	/* waste enough cycles to be aligned on cycle 32 */
-	sbi IO_PORTD, DEBUG_PORTD_BIT	/* DEBUG */
-	in r20, IO_PIND				/* read the input port */
-	cbi IO_PORTD, DEBUG_PORTD_BIT	/* DEBUG */
-	andi r20, GC_DATA_MASK			/* isolate the data bit */
-	st z+, r20						/* store the value */
-
-	dec r23					; One less bit to receive...
+	dec r23							; One less bit to receive...
 	breq gotCommand
 
 	ldi r19, DATA_RAISE_TIMEOUT
@@ -127,31 +142,29 @@ waitHigh:
 	breq timeout
 	in r20, IO_PIND
 	andi r20, GC_DATA_MASK
-	breq waitHigh			; Still high? Keep looping
+	breq waitHigh					; Still high? Keep looping
 
 	rjmp readNextBit
 
-	/* At this point, we have read a full 24bit command. A document
-	I found says that there is a 6ms second delay before a real gamecube
-	controller responds. That leaves us a lot of time :) */
+	; At this point, we have read a full 24bit command. A document
+	; I found says that there is a 6ms second delay before a real gamecube
+	; controller responds. That leaves us a lot of time :)
 gotCommand:
 	ldi	r30, lo8(gc_rx_buf)
 	ldi r31, hi8(gc_rx_buf)
 
-	/*  note: Last byte not checked... it contains a bit for rumble motor.. I'm 
-	not sure about the others. I'd rather reply anyway than not doing it and
-	having the console beleiving the controller is gone or failing... 
-	*/
+	; note: Last byte not checked... it contains a bit for rumble motor.. I'm 
+	; not sure about the others. I'd rather reply anyway than not doing it and
+	; having the console beleiving the controller is gone or failing... 
 
 	rjmp buildAndSendPacket
 
 timeout:
-	/* If we had received only 9 bits, the command is possibly getID+status. We
-	   _must_ respond to this if we want the console to detect us. 
-
-	   r23 is a count-down from 24 during the receive phase so it should
-	   contain a value of 15.. 
-	*/
+	;  If we had received only 9 bits, the command is possibly getID+status. We
+	;   _must_ respond to this if we want the console to detect us. 
+	;
+	; r23 is a count-down from 24 during the receive phase so it should
+	; contain a value of 15.. 
 	ldi r19, 15
 	sub r19, r23 
 	brne interrupt_done
@@ -176,10 +189,10 @@ interrupt_done:
 	reti
 
 align_delay:
-	ldi r19, 3						/* 1 */
-lp634534:	
-	dec r19							/* 1 */
-	brne lp634534					/* 2 */
+	ldi r19, 3
+lp634534:
+	dec r19
+	brne lp634534
 	ret
 
 sendIdPacket:
@@ -198,8 +211,8 @@ sendOriginsPacket:
 
 
 	/******************************************
-		Build a 64bit data packet for the GC using
-		the latest values from the snes controller
+	Build a 64bit data packet for the GC using
+	the latest values from the snes controller
 	******************************************/
 buildAndSendPacket:
 	ldi	zl, lo8(gc_tx_buf)
@@ -208,49 +221,49 @@ buildAndSendPacket:
 
 	ldi r19, 1	; used to set values in reply buffer
 
-	/* Test each button/direciton bit from the controller, and set the
-	  appropriate bytes in response. SNES bits are active low, GC bits are
-	  active high. */
-	ldi r19, (1<<4)	/* SNES START */
+	; Test each button/direciton bit from the controller, and set the
+	;  appropriate bytes in response. SNES bits are active low, GC bits are
+	;  active high.
+	ldi r19, (1<<4)	; SNES START
 	and r19, r4
-		st z+, r19	/* GC START */
-	ldi r19, (1<<6) /* SNES Y */
+		st z+, r19	; GC START
+	ldi r19, (1<<6) ; SNES Y
 	and r19, r4
-		st z+, r19	/* GC Y */
-	ldi r19, (1<<6)	/* SNES X */
+		st z+, r19	; GC Y
+	ldi r19, (1<<6)	; SNES X
 	and r19, r5
-		st z+, r19	/* GC X */
-	ldi r19, (1<<7) /* SNES B */
+		st z+, r19	; GC X
+	ldi r19, (1<<7) ; SNES B
 	and r19, r4
-		st z+, r19	/* GC B */
-	ldi r19, (1<<7)	/* SNES A */
+		st z+, r19	; GC B
+	ldi r19, (1<<7)	; SNES A
 	and r19, r5
-		st z+, r19	/* GC A */
-	st z+, r19	/* This is the first bit of the 2nd byte. Always 1 */
+		st z+, r19	; GC A
+	st z+, r19	; This is the first bit of the 2nd byte. Always 1
 
-	ldi r19, (1<<5)	/* SNES L */
+	ldi r19, (1<<5)	; SNES L
 	and r19, r5
-		st z+, r19	/* GC L */
-	ldi r19, (1<<4)	/* SNES R */
+		st z+, r19	; GC L
+	ldi r19, (1<<4)	; SNES R
 	and r19, r5
-		st z+, r19	/* GC R */
-	ldi r19, (1<<5)	/* SNES SELECT */
+		st z+, r19	; GC R
+	ldi r19, (1<<5)	; SNES SELECT
 	and r19, r4
-		st z+, r19	/* GC Z */
-	ldi r19, (1<<3)	/* SNES UP */
+		st z+, r19	; GC Z
+	ldi r19, (1<<3)	; SNES UP
 	and r19, r4
-		st z+, r19	/* GC UP */
-	ldi r19, (1<<2)	/* SNES DOWN */
+		st z+, r19	; GC UP
+	ldi r19, (1<<2)	; SNES DOWN
 	and r19, r4
 		st z+, r19
-	ldi r19, (1<<0)	/* SNES RIGHT */
+	ldi r19, (1<<0)	; SNES RIGHT
 	and r19, r4
-		st z+, r19	/* GC RIGHT */
-	ldi r19, (1<<1)	/* SNES LEFT */
+		st z+, r19	; GC RIGHT
+	ldi r19, (1<<1)	; SNES LEFT
 	and r19, r4
 		st z+, r19
 	
-	/* Send the packet */
+	; Send the packet
 	ldi	zl, lo8(gc_tx_buf)
 	ldi zh, hi8(gc_tx_buf)
 	ldi r23, 65
@@ -526,8 +539,8 @@ r8bits_lp:
 	out IO_PORTC, r16
 
 	in r16, IO_PINC
-	com r16	/* snes active low, make bit active high */
-	andi r16, 0x08	/* mask the data bit */
+	com r16			; snes active low, make bit active high
+	andi r16, 0x08	; mask the data bit
 	lsr r16
 	lsr r16
 	lsr r16
@@ -552,8 +565,8 @@ delay_6us:
 	/* At 16 Mhz, 1us is 16 cycle so 6 us is 96 cycles... */
 	ldi r16, 30
 delay_6us_loop:
-	dec r16				/* 1 */
-	brne delay_6us_loop	/* 2 when taken */
+	dec r16				; 1
+	brne delay_6us_loop	; 2 when taken
 	ret
 
 	

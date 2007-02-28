@@ -25,8 +25,7 @@ fuse:
 	$(UISP) --wr_fuse_h=0xc9 --wr_fuse_l=0x9f
 
 flash: snes2wii.hex
-	#$(UISP) --erase --upload --verify if=snes2wii.hex
-	$(UISP) --erase --upload if=snes2wii.hex
+	$(UISP) --erase --upload --verify if=snes2wii.hex
 
 %.o: %.S
 	$(CC) $(CFLAGS) -c $<
