@@ -37,16 +37,18 @@
 ;
 ;	------ Interrupt context registers (some are used before enabling interrupts though)
 ;		r1: SREG backup in interrupt. Faster than pushing it to stack.
+;		r7: Variable. Non-zero: Send 80 bit reply instead of 64 bit reply.
 ;		r19: Temporary register for interrupt context
 ;		r20: Temporary register for interrupt context
 ;		r23: Bit Counter for interrupt context
 
 #include <avr/io.h>
 
-.lcomm gc_rx_buf, 24
-.lcomm gc_tx_buf, 65	; reply is 64 bit + 1 stop bit
 .lcomm id_status, 25	; reply to 0000 0000 1 (0x00)
 .lcomm origins_buf, 81	; reply to 0100 0001 1 (0x41)
+.lcomm gc_rx_buf, 24
+.lcomm gc_tx_buf, 64	; reply is 64 bit + 1 stop bit
+.lcomm gc_tx_buf_extra, 16	; for mysterious 80bit response
 
 .text
 .global main
@@ -65,6 +67,7 @@
 #define IO_PINB	_SFR_IO_ADDR(PINB)
 #define IO_MCUCR _SFR_IO_ADDR(MCUCR)
 #define IO_GICR	_SFR_IO_ADDR(GICR)
+#define IO_GIFR	_SFR_IO_ADDR(GIFR)
 
 #define CLK_H_LATCH_H	0x30
 #define CLK_H_LATCH_L	0x20
@@ -73,7 +76,7 @@
 #define DEBUG_PORTD_BIT 0x00	/* In PORTD */
 #define GC_DATA_BIT		0x02	/* in PORTD */
 #define GC_DATA_MASK	0x04	
-#define DATA_FALL_TIMEOUT	0x15
+#define DATA_FALL_TIMEOUT	0x10
 #define DATA_RAISE_TIMEOUT	0x15 
 
 ; Useful
@@ -84,8 +87,8 @@
 
 SIG_INTERRUPT0:
 	in r1, IO_SREG
-	ldi	r30, lo8(gc_rx_buf)
-	ldi r31, hi8(gc_rx_buf)
+	ldi	zl, lo8(gc_rx_buf)
+	ldi zh, hi8(gc_rx_buf)
 	ldi r23, 24				; We will receive a 24bit command
 
 	rjmp fell
@@ -127,9 +130,11 @@ fell:
 	;  adjusting the align_delay subroutine.
 
 	rcall align_delay				; waste enough cycles to be aligned on cycle 32
-	sbi IO_PORTD, DEBUG_PORTD_BIT	; DEBUG
+;	sbi IO_PORTD, DEBUG_PORTD_BIT	; DEBUG
+	nop
 	in r20, IO_PIND					; read the input port
-	cbi IO_PORTD, DEBUG_PORTD_BIT	; DEBUG
+;	cbi IO_PORTD, DEBUG_PORTD_BIT	; DEBUG
+	nop
 	andi r20, GC_DATA_MASK			; isolate the data bit
 	st z+, r20						; store the value
 
@@ -150,12 +155,20 @@ waitHigh:
 	; I found says that there is a 6ms second delay before a real gamecube
 	; controller responds. That leaves us a lot of time :)
 gotCommand:
-	ldi	r30, lo8(gc_rx_buf)
-	ldi r31, hi8(gc_rx_buf)
+	ldi	zl, lo8(gc_rx_buf)
+	ldi zh, hi8(gc_rx_buf)
 
+	sbi IO_PORTD, DEBUG_PORTD_BIT	; DEBUG
+	cbi IO_PORTD, DEBUG_PORTD_BIT	; DEBUG
 	; note: Last byte not checked... it contains a bit for rumble motor.. I'm 
 	; not sure about the others. I'd rather reply anyway than not doing it and
 	; having the console beleiving the controller is gone or failing... 
+
+	; 64 bit replies: 0x400300, 0x400302  ...
+	; 80 bit replies: 0x420000, 0x420302
+
+	; test only bit 6 (0x020000)
+	ldd r7, Z+6
 
 	rjmp buildAndSendPacket
 
@@ -186,6 +199,12 @@ interrupt_done:
 	inc r3				; when r3 is non-zero, mainloop reads one time from the
 						; slave controller and clears this register.
 	out IO_SREG, r1
+
+	; Clear the interrupt flag to prevent re-entering the handler right away. When we
+	; transmit data, it triggers interrupts....
+	ldi r19, 0x40
+	out IO_GIFR, r19
+	
 	reti
 
 align_delay:
@@ -198,14 +217,14 @@ lp634534:
 sendIdPacket:
 	ldi	zl, lo8(id_status)
 	ldi zh, hi8(id_status)
-	ldi r23, 25
+	ldi r23, 24
 	rcall sendGCData
 	rjmp interrupt_done
 
 sendOriginsPacket:
 	ldi	zl, lo8(origins_buf)
 	ldi zh, hi8(origins_buf)
-	ldi r23, 81
+	ldi r23, 80
 	rcall sendGCData
 	rjmp interrupt_done
 
@@ -266,7 +285,17 @@ buildAndSendPacket:
 	; Send the packet
 	ldi	zl, lo8(gc_tx_buf)
 	ldi zh, hi8(gc_tx_buf)
-	ldi r23, 65
+	
+	tst r7
+	breq reply64
+
+reply80:
+	ldi r23, 80
+	rcall sendGCData
+	rjmp interrupt_done
+
+reply64:
+	ldi r23, 64
 	rcall sendGCData
 	rjmp interrupt_done
 
@@ -319,6 +348,22 @@ lp_send0_1us:
 	dec r23
 	brne lp_sendGCData_bits
 
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	; STOP BIT
+	sbi IO_DDRD, GC_DATA_BIT ; Pull low for stop bit
+	ldi r20, 4
+stbdly0:
+	dec r20
+	brne stbdly0
+	nop
+	cbi IO_DDRD, GC_DATA_BIT	; Done
+
+
 	ret
 
 send1:
@@ -342,6 +387,22 @@ lp_send1_3us:
 
 	dec r23
 	brne lp_sendGCData_bits
+
+nop
+nop
+nop
+nop
+nop
+nop
+	; STOP BIT
+	sbi IO_DDRD, GC_DATA_BIT ; Pull low for stop bit
+	ldi r20,4 
+stbdly1:
+	dec r20
+	brne stbdly1
+	nop
+	cbi IO_DDRD, GC_DATA_BIT	; Done
+
 
 	ret
 
@@ -699,6 +760,22 @@ lp34128:
 	st z+, r20
 	dec r19
 	brne lp34128
+
+	; extra bits for 80bit reply to different poll
+	ldi zl, lo8(gc_tx_buf_extra)
+	ldi zh, hi8(gc_tx_buf_extra)
+	ldi r19, 16	; start by zero'ing all 16 bits
+lp6343:
+	st z+, r20
+	dec r19
+	brne lp6343
+
+	ldi zl, lo8(gc_tx_buf_extra)
+	ldi zh, hi8(gc_tx_buf_extra)
+
+	ldi r16, 0xff ; now set 8th and 16th bits
+	std Z+7, r16
+	std Z+15, r16
 
 	ret
 
