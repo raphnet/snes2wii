@@ -1,0 +1,14 @@
+Here are special button combinations which sends
+button presses events that would not be possible
+to do on regular NES or SNES controller. These
+are mostl useful to get back to emulator menus.
+
+Snes mode:
+	- L+R++Select+left	-> Cstick left
+	- L+R+Start+right	-> Z
+
+Nes mode:
+	- A+B+Select+left	-> Cstick left
+	- A+B+Select+right	-> Z
+	- A+B+Select+up		-> L+R
+
