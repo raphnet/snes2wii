@@ -1,3 +1,7 @@
+.data
+.ascii "Snes2Wii version 1.1, (C) 2007 Raphael Assenat <raph@raphnet.net>"
+.ascii "Released under the GPL. See http://www.raphnet.net/electronique/x2wii/index_en.php"
+
 ;
 ;	snes2wii: AVR Microcontroller firmware for converting SNES/NES controller
 ;	          protocol to Nintendo Wii/Gamecube controller protocol.
@@ -59,6 +63,7 @@
 .global main
 .global SIG_INTERRUPT0
 .global gc_rx_buf
+
 
 #define IO_SREG	_SFR_IO_ADDR(SREG)
 #define IO_PORTD _SFR_IO_ADDR(PORTD)
@@ -529,6 +534,18 @@ main:
 	and r2, r16		; isolate the bit.
 	; Now r2 contains 0 in snes mode, 0x02 in nes mode.
 
+	; Check if the user wants to force NES mode by
+	; doing a NES mode read (this works on an SNES controller
+	; too) to check the
+	rcall readNes
+
+	mov r16, r4
+	andi r16, 0x10
+	breq notForced
+	ldi r16, 0x02
+	mov r2, r16	; r2 not zero means nes mode.
+
+notForced:
 	rcall clr_precooked_buffers
 	rcall build_id_packet
 	rcall build_origins_packet
