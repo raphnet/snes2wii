@@ -1,3 +1,8 @@
+snes2wii version 1.1
+(C) 2007 Raphaël Assénat <raph@raphnet.net>
+Source code released under the GPL license. See
+http://www.raphnet.net/electronique/x2wii/index_en.php
+
 ----------------------
 --- Operating mode ---
 ----------------------
@@ -10,10 +15,10 @@ The operating mode can be forced to NES mode by holding the start
 button down at power-up. (When you turn on your console or when you
 connect the adapter to an already running console).
 
-When NES mode is forced on with an SNES controller, the following mapping
-applies. In my opinion, NES games are almost unplayable with an SNES 
-controller unless running in this mode.
-
+When NES mode is forced on with an SNES controller, the A-B buttons
+become B and Y. NES games are almost unplayable with an SNES 
+controller unless running in this mode. See mapping below for
+details.
 
 -------------------------
 ---- Button mapping: ----
@@ -37,7 +42,7 @@ Nes controller:
 - Nes B -> Gamecube B
 - Nes A -> Gamecube A
 
-Snes controller in NES mode:
+Snes controller in NES mode: (hold start at power-up)
 - Snes Start -> Gamecube Start
 - Snes Select -> Gamecube Select
 - Snes Left,Right,Up,Down -> Gamecube digital Left,Right,Up,Down
