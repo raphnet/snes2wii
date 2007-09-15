@@ -1,0 +1,68 @@
+----------------------
+--- Operating mode ---
+----------------------
+
+This software can run in NES controller mode or in SNES controller mode. 
+The mode is selected via pin PORTB1 (JP1). If connected to ground, the 
+software operates in NES mode. 
+
+The operating mode can be forced to NES mode by holding the start
+button down at power-up. (When you turn on your console or when you
+connect the adapter to an already running console).
+
+When NES mode is forced on with an SNES controller, the following mapping
+applies. In my opinion, NES games are almost unplayable with an SNES 
+controller unless running in this mode.
+
+
+-------------------------
+---- Button mapping: ----
+-------------------------
+
+Snes controller:
+- Snes Start -> Gamecube Start
+- Snes Select -> Gamecube Z
+- Snes Left,Right,Up,Down -> Gamecube Left,Right,Up,Down
+- Snes Y -> Gamecube Y
+- Snes X -> Gamecube X
+- Snes B -> Gamecube B
+- Snes A -> Gamecube A
+- Snes L -> Gamecube L
+- Snes R -> Gamecube R
+
+Nes controller:
+- Nes Start -> Gamecube Start
+- Nes Select -> Gamecube Z
+- Nes Left,Right,Up,Down -> Gamecube Left,Right,Up,Down
+- Nes B -> Gamecube B
+- Nes A -> Gamecube A
+
+Snes controller in NES mode:
+- Snes Start -> Gamecube Start
+- Snes Select -> Gamecube Select
+- Snes Left,Right,Up,Down -> Gamecube digital Left,Right,Up,Down
+- Snes Y -> Gamecube B
+- Snes B -> Gamecube A
+
+Notice the only peculiarity is that the Snes SELECT button is 
+mapped to the Gamecube's Z button. There's no select button on a
+gamecube controller...
+
+
+---------------------------
+--- Button combinations ---
+---------------------------
+
+Here are special button combinations which sends
+button presses or analog axes events that are normally 
+impossible on a regular NES or SNES controller due to the
+lower number of buttons and missing analogic sticks. These
+combinations are useful to get back to emulator menus.
+
+Snes mode:
+	- L+R+Select+left	-> Cstick right
+
+Nes mode:
+	- A+B+Select+left	-> Cstick right
+	- A+B+Select+up		-> L+R
+

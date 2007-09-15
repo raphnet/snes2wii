@@ -29,6 +29,9 @@
 ;		controller immediately after each interrupt.
 ;		r4-r5: Nes/Snes controller latest read bytes (r4 filled first)
 ;		r8: If not zero, report C stick pointing to the left instead of center
+;		r9: Copy of r4
+;		r10: Copy of r5
+;
 ;
 ;	------ registers for non-interrupt context
 ;		r2: Contains 0 in snes mode, non-zero in nes mode
@@ -246,42 +249,42 @@ buildAndSendPacket:
 	;  appropriate bytes in response. SNES bits are active low, GC bits are
 	;  active high.
 	ldi r19, (1<<4)	; SNES START
-	and r19, r4
+	and r19, r9
 		st z+, r19	; GC START
 	ldi r19, (1<<6) ; SNES Y
-	and r19, r4
+	and r19, r9
 		st z+, r19	; GC Y
 	ldi r19, (1<<6)	; SNES X
-	and r19, r5
+	and r19, r10
 		st z+, r19	; GC X
 	ldi r19, (1<<7) ; SNES B
-	and r19, r4
+	and r19, r9
 		st z+, r19	; GC B
 	ldi r19, (1<<7)	; SNES A
-	and r19, r5
+	and r19, r10
 		st z+, r19	; GC A
 	st z+, r19	; This is the first bit of the 2nd byte. Always 1
 
 	ldi r19, (1<<5)	; SNES L
-	and r19, r5
+	and r19, r10
 		st z+, r19	; GC L
 	ldi r19, (1<<4)	; SNES R
-	and r19, r5
+	and r19, r10
 		st z+, r19	; GC R
 	ldi r19, (1<<5)	; SNES SELECT
-	and r19, r4
+	and r19, r9
 		st z+, r19	; GC Z
 	ldi r19, (1<<3)	; SNES UP
-	and r19, r4
+	and r19, r9
 		st z+, r19	; GC UP
 	ldi r19, (1<<2)	; SNES DOWN
-	and r19, r4
+	and r19, r9
 		st z+, r19
 	ldi r19, (1<<0)	; SNES RIGHT
-	and r19, r4
+	and r19, r9
 		st z+, r19	; GC RIGHT
 	ldi r19, (1<<1)	; SNES LEFT
-	and r19, r4
+	and r19, r9
 		st z+, r19
 	
 	; Point to the beginning of the packet. This will
@@ -543,14 +546,10 @@ mainloop:
 	tst r3				; set inside int handler
 	breq mainloop;
 	
-	clr r3
-	
 	tst r2			; ==0 snes mode, !=0 nes mode
 	breq doSnes
 	
 	rjmp doNes
-
-
 
 
 	;-- Special Button combinations for SNES --
@@ -574,13 +573,10 @@ check_sel_left:
 	; set r8 to send a cstick towards the right value
 	ldi r16, 0xff
 	mov r8, r16
+	clr r9	; dont send any..
+	clr r10	; ..other keypresses.
 
-	rjmp dly
-
-none:
-	clr r8
-	rjmp dly
-
+	rjmp waitSnesIdle
 	
 	
 	
@@ -603,26 +599,57 @@ doNes:
 	cpi r16, 0xa2
 	brne check_bsu
 
-	; set r8 to send a cstick towads the right value
+	; set r8 to send a cstick towards the right value
 	ldi r16, 0xff
 	mov r8, r16
-	rjmp dly
+	clr r9	; dont send any..
+	clr r10	; ..other keypresses.
+	rjmp waitNesIdle
 
-check_bsu:
+check_bsu:	; Test for B+Select+up
 	clr r8	; b+sel+left was false. Dont send Cstick right
-	; Test for B+Select+up
 	mov r16, r4
 	andi r16, 0xa8
 	cpi r16, 0xa8
-	brne dly
+	brne dly	; no valid key combinations found.
 
-	; set L and R bits
-	mov r16, r5
-	ori r16, 0x30
-	mov r5, r16
+	; set only L and R bits
+	ldi r16, 0x30
+	clr r9			; dont send any other keypresses...
+	mov r10, r16		; apart from L+R.
+;	rjmp waitNesIdle	; fallthrough to waitNesIdle
 
-	; rjmp dly
+	; To prevent unwanted operations when exiting from a button combination, 
+	; wait until all buttons have been released
+waitNesIdle:
+	rcall delay_16ms
+	rcall readNes
+	tst r4
+	brne waitNesIdle
+	tst r5
+	brne waitNesIdle
+	rjmp none	; this will clear special combinations
+
+	; To prevent unwanted operations when exiting from a button combination, 
+	; wait until all buttons have been released
+waitSnesIdle:
+	rcall delay_16ms
+	rcall readSnes
+	tst r4
+	brne waitNesIdle
+	tst r5
+	brne waitNesIdle
+	rjmp none	; this will clear special combinations
+
+	; No special combinations active
+none:
+	clr r8		; Disable C-stick right thing
+	rjmp dly
+
+
 dly:
+	mov r9, r4	; Just copy the latest values...
+	mov r10, r5	; to the global register pair/
 	rcall delay_16ms	; dont read the controller again too soon?
 						; just in case some non-standard snes compatible
 						; controller does not like this.
