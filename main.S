@@ -28,6 +28,7 @@
 ;		r3: Set to non-zero after each interrupt, used to read from the slave
 ;		controller immediately after each interrupt.
 ;		r4-r5: Nes/Snes controller latest read bytes (r4 filled first)
+;		r8: If not zero, report C stick pointing to the left instead of center
 ;
 ;	------ registers for non-interrupt context
 ;		r2: Contains 0 in snes mode, non-zero in nes mode
@@ -41,6 +42,7 @@
 ;		r19: Temporary register for interrupt context
 ;		r20: Temporary register for interrupt context
 ;		r23: Bit Counter for interrupt context
+
 
 #include <avr/io.h>
 
@@ -282,10 +284,48 @@ buildAndSendPacket:
 	and r19, r4
 		st z+, r19
 	
-	; Send the packet
+	; Point to the beginning of the packet. This will
+	; be used by the transmission routine later
 	ldi	zl, lo8(gc_tx_buf)
 	ldi zh, hi8(gc_tx_buf)
 	
+	; Generate special keys on certain combinations detected in main context
+checkForC:
+	tst r8	; when r8 set, send CStick towards left value
+	breq centered
+
+	; TODO: Is this left or right?
+	ldi r19, 0xff
+	std z+32, r19	; 1
+	std z+33, r19	; 2
+	std z+34, r19	; 3
+	std z+35, r19	; 4
+	std z+36, r19	; 5
+	std z+37, r19	; 6
+	std z+38, r19	; 7
+	std z+39, r19	; 8
+
+
+	ldi r19, 0xff	; this sets msb. enough?
+	std z+32, r19
+
+
+	rjmp length_branch
+centered:
+	; based on our origin packet, we
+	; send 1000 0001 when centered. 
+	ldi r19, 0xff
+	std z+32, r19	; 1
+	std z+33, r0	; 2
+	std z+34, r0	; 3
+	std z+35, r0	; 4
+	std z+36, r0	; 5
+	std z+37, r0	; 6
+	std z+38, r0	; 7
+	std z+39, r19	; 8
+
+length_branch:
+	; Check if we must send 64 or 80 bits.
 	tst r7
 	breq reply64
 
@@ -491,6 +531,8 @@ main:
 	rcall build_origins_packet
 	rcall initReplyBuf
 
+	clr r8
+
 	sei
 mainloop:
 	/* A real Snes polls the controller at 60hz. But we
@@ -506,22 +548,92 @@ mainloop:
 	tst r2			; ==0 snes mode, !=0 nes mode
 	breq doSnes
 	
-	rcall readNes
-	rjmp dly
+	rjmp doNes
 
+
+
+
+	;-- Special Button combinations for SNES --
+	; L+R+Select+left -> Cstick towards right
 doSnes:
 	rcall readSnes
+
+	; Check if L and R are pressed
+	mov r16, r5	
+	andi r16, 0x30
+	cpi r16, 0x30
+	brne none;	L and R not pressed. Get out.
+
+check_sel_left:
+	; Check for Select + Left
+	mov r16, r4
+	andi r16, 0x22
+	cpi r16, 0x22
+	brne none
+
+	; set r8 to send a cstick towards the right value
+	ldi r16, 0xff
+	mov r8, r16
+
+	rjmp dly
+
+none:
+	clr r8
+	rjmp dly
+
+	
+	
+	
+	
+	; -- Special Button combinations for NES --
+	; A+B+Select+left       -> Cstick left
+	; A+B+Select+up			-> L+R
+doNes:
+	rcall readNes
+
+	; Check if A is pressed
+	mov r16, r5
+	andi r16, 0x80
+	cpi r16, 0x80
+	brne none
+
+	; Test for B+Select+left
+	mov r16, r4
+	andi r16, 0xa2
+	cpi r16, 0xa2
+	brne check_bsu
+
+	; set r8 to send a cstick towads the right value
+	ldi r16, 0xff
+	mov r8, r16
+	rjmp dly
+
+check_bsu:
+	clr r8	; b+sel+left was false. Dont send Cstick right
+	; Test for B+Select+up
+	mov r16, r4
+	andi r16, 0xa8
+	cpi r16, 0xa8
+	brne dly
+
+	; set L and R bits
+	mov r16, r5
+	ori r16, 0x30
+	mov r5, r16
+
+	; rjmp dly
 dly:
 	rcall delay_16ms	; dont read the controller again too soon?
 						; just in case some non-standard snes compatible
 						; controller does not like this.
 
+	clr r3
 	rjmp mainloop
 
 	/*******************************************************
 	 * Subroutine which reads the status of a NES controller
 	 * into the r4 and r5 registers, presenting the bits
-	 * as if it was from a NES controller.
+	 * as if it was from an SNES controller.
 	 ******************************************************/
 readNes:
 	push r17 ; for r8bits which uses it
@@ -691,9 +803,9 @@ build_id_packet:
 
 build_origins_packet:
 	; When Wii sends 0100 0001 1, my gc controller replies:
-	; 0000 0000 1000 0000 1000 0011 0111 1010 
-	; 1000 0001 0111 1110 0001 0110 0001 0011
-	; 0000 0000 0000 0000 1
+	; 0000 0000   1000 0000   1000 0011   0111 1010 
+	; 1000 0001   0111 1110   0001 0110   0001 0011
+	; 0000 0000   0000 0000 1
 	;
 	ldi r19, 1
 	ldi zl, lo8(origins_buf)

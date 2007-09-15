@@ -27,5 +27,13 @@ fuse:
 flash: snes2wii.hex
 	$(UISP) --erase --upload --verify if=snes2wii.hex
 
+fuse_avrdude:
+	sudo avrdude -p m8 -P usb -c avrispmkII -Uhfuse:w:0xc9 -Ulfuse:w:0x9f 
+	
+
+flash_avrdude: snes2wii.hex
+	sudo avrdude -p m8 -P usb -c avrispmkII -Uflash:w:snes2wii.hex -B 1.0
+
+
 %.o: %.S
 	$(CC) $(CFLAGS) -c $<
