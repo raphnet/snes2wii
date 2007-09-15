@@ -1,0 +1,17 @@
+snes2wii version 1.1
+(C) 2007 Raphaël Assénat <raph@raphnet.net>
+Source code released under the GPL license. See
+http://www.raphnet.net/electronique/x2wii/index_en.php
+
+Version 1.1:
+	- NES mode can be forced on by holding the Start button at power-up. Without
+	  this, I consider NES games almost unplayable using an SNES controller.
+	- Implemented button combinations which can affect how unaccessible
+ 	  Gamecube buttons and sticks are reported. eg: Sending L+R pressed with
+	  a NES controller, and sending 'CStick towards the right'. See
+	  mappings.txt for details.
+	- Implemented new Gamecube commands for better compatibility, eg: GCLinux
+
+Version 1.0:
+	- Initial relase. 
+	- Supports NES and Snes controllers (selected by io pin)
