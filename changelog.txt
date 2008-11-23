@@ -1,7 +1,13 @@
-snes2wii version 1.1
-(C) 2007 Raphaël Assénat <raph@raphnet.net>
+snes2wii version 1.2
+(C) 2007-2008 Raphaël Assénat <raph@raphnet.net>
 Source code released under the GPL license. See
 http://www.raphnet.net/electronique/x2wii/index_en.php
+
+
+Version 1.2:
+	- Fixed a small deviation from the "normal" controller protocol which
+	  _could_ have caused incompatibility with some games.
+    - Code improvements.
 
 Version 1.1:
 	- NES mode can be forced on by holding the Start button at power-up. Without

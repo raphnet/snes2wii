@@ -1,5 +1,5 @@
 .data
-.ascii "Snes2Wii version 1.1, (C) 2007 Raphael Assenat <raph@raphnet.net>"
+.ascii "Snes2Wii version 1.2, (C) 2007-2008 Raphael Assenat <raph@raphnet.net>"
 .ascii "Released under the GPL. See http://www.raphnet.net/electronique/x2wii/index_en.php"
 
 ;
@@ -53,8 +53,8 @@
 
 #include <avr/io.h>
 
-.lcomm id_status, 25	; reply to 0000 0000 1 (0x00)
-.lcomm origins_buf, 81	; reply to 0100 0001 1 (0x41)
+.lcomm id_status, 24	; reply to 0000 0000 1 (0x00)
+.lcomm origins_buf, 80	; reply to 0100 0001 1 (0x41)
 .lcomm gc_rx_buf, 24
 .lcomm gc_tx_buf, 64	; reply is 64 bit + 1 stop bit
 .lcomm gc_tx_buf_extra, 16	; for mysterious 80bit response
@@ -368,6 +368,9 @@ reply64:
 	* Z must point to first byte of data. Every byte
 	* represents one bit (programming laziness..). A logic
 	* 1 is sent when a byte is non-zero.
+	* 
+	* A stop bit is automatically added to the end. 
+	*
 	* Used registers: r19, r20
 	************************************************/
 sendGCData:
@@ -890,8 +893,6 @@ build_origins_packet:
 	st z+, r19
 	st z, r19
 	;;;; 16 bit of 0's? 
-	adiw zl, 17
-	st z, r19 	; Stop bit
 
 	ret
 
@@ -903,7 +904,7 @@ clr_precooked_buffers:
 	ldi	zl, lo8(id_status)
 	ldi zh, hi8(id_status)
 	
-	ldi r19, 25
+	ldi r19, 24
 lp3412:
 	st z+, r20
 	dec r19
@@ -911,7 +912,7 @@ lp3412:
 
 	ldi	zl, lo8(origins_buf)
 	ldi zh, hi8(origins_buf)
-	ldi r19, 81
+	ldi r19, 80
 lp34128:
 	st z+, r20
 	dec r19
@@ -949,10 +950,6 @@ cp_lp:
 	st z+, r20
 	dec r16
 	brne cp_lp
-
-	; And add the final 1 (stop bit)
-	ldi r20, 1
-	st z+, r20
 
 	ret
 
