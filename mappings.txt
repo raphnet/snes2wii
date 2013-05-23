@@ -1,5 +1,5 @@
-snes2wii version 1.1
-(C) 2007 Raphaël Assénat <raph@raphnet.net>
+snes2wii version 1.3
+(C) 2007-2013 Raphaël Assénat <raph@raphnet.net>
 Source code released under the GPL license. See
 http://www.raphnet.net/electronique/x2wii/index_en.php
 
@@ -20,6 +20,9 @@ become B and Y. NES games are almost unplayable with an SNES
 controller unless running in this mode. See mapping below for
 details.
 
+If a NES controller is used, the A and B buttons can also be
+swapped by holding A and B down at power up.
+
 -------------------------
 ---- Button mapping: ----
 -------------------------
@@ -39,8 +42,11 @@ Nes controller:
 - Nes Start -> Gamecube Start
 - Nes Select -> Gamecube Z
 - Nes Left,Right,Up,Down -> Gamecube Left,Right,Up,Down
-- Nes B -> Gamecube B
-- Nes A -> Gamecube A
+- Nes B -> Gamecube B*
+- Nes A -> Gamecube A*
+
+* A and B will be inverted if the adapter was powerd up holding
+A and B down.
 
 Snes controller in NES mode: (hold start at power-up)
 - Snes Start -> Gamecube Start
