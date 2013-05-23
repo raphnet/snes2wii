@@ -1,5 +1,5 @@
 .data
-.ascii "Snes2Wii version 1.2, (C) 2007-2008 Raphael Assenat <raph@raphnet.net>"
+.ascii "Snes2Wii version 1.3, (C) 2007-2013 Raphael Assenat <raph@raphnet.net>"
 .ascii "Released under the GPL. See http://www.raphnet.net/electronique/x2wii/index_en.php"
 
 ;
@@ -35,6 +35,7 @@
 ;		r8: If not zero, report C stick pointing to the left instead of center
 ;		r9: Copy of r4
 ;		r10: Copy of r5
+;		r6: When non-zero, swaps A and B nes buttons
 ;
 ;
 ;	------ registers for non-interrupt context
@@ -547,8 +548,18 @@ main:
 	breq notForced
 	ldi r16, 0x02
 	mov r2, r16	; r2 not zero means nes mode.
-
 notForced:
+
+	; Check for A and B being held down to enable the swap (NES)
+	;
+	; Setting r6 to non-zero enables the swap
+	; MSB of R4 is B button
+	; MSB of R5 is A button
+	mov r16, r4
+	or r16, r5	
+	andi r16, 0x80
+	mov r6, r16
+
 	rcall clr_precooked_buffers
 	rcall build_id_packet
 	rcall build_origins_packet
@@ -700,11 +711,26 @@ readNes:
 	
 	/* NES sends data in this order:
 	 * A B Select Start Up Down Left Right
+	 * |------------- R18 ----------------|
 	 * 
 	 * SNES sends data in this order:
 	 * B Y Select Start Up Down Left Right | A X L R 1 1 1 1 
 	 * |--------- R4 ----------------------|------ R5 -----|
 	 */
+	tst r6
+	breq no_a_b_swap
+
+	mov r16, r18
+	andi r16, 0x80	; Extract the A button
+	lsr r16			; Now R16 is 0x40 or 0x00 depending on the A button
+
+	ldi r17, 0x40	; Propagate B bit to msb position
+	andi r18, 0x7F	; ... 
+	add r18, r17 	; ...
+	andi r18, ~0x40	; Clear the original B bit for the A button
+	or r18, r16	; Patch in the A button
+
+no_a_b_swap:
 	ldi r16, 0x80	; mask for bit 'A'
 	and r16, r18
 	mov r5, r16		; set or clear snes bit A

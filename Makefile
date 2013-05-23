@@ -3,7 +3,6 @@ AS=$(CC)
 LD=$(CC)
 
 CPU=atmega8
-UISP=uisp -dprog=stk500 -dpart=atmega8 -dserial=/dev/avr
 CFLAGS=-Wall -mmcu=$(CPU)
 LDFLAGS=-mmcu=$(CPU) -Wl,-Map=snes2wii.map
 
@@ -22,17 +21,10 @@ snes2wii.hex: snes2wii.elf
 	avr-size snes2wii.elf
 
 fuse:
-	$(UISP) --wr_fuse_h=0xc9 --wr_fuse_l=0x9f
-
-flash: snes2wii.hex
-	$(UISP) --erase --upload --verify if=snes2wii.hex
-
-fuse_avrdude:
-	sudo avrdude -p m8 -P usb -c avrispmkII -Uhfuse:w:0xc9 -Ulfuse:w:0x9f 
+	avrdude -p m8 -P usb -c avrispmkII -Uhfuse:w:0xc9:m -Ulfuse:w:0x9f:m -B 20.0
 	
-
-flash_avrdude: snes2wii.hex
-	sudo avrdude -p m8 -P usb -c avrispmkII -Uflash:w:snes2wii.hex -B 1.0
+flash: snes2wii.hex
+	avrdude -p m8 -P usb -c avrispmkII -Uflash:w:snes2wii.hex -B 1.0
 
 
 %.o: %.S
