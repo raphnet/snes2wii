@@ -1,5 +1,5 @@
 .data
-.ascii "Snes2Wii version 1.3, (C) 2007-2013 Raphael Assenat <raph@raphnet.net>"
+.ascii "Snes2Wii version 1.4, (C) 2007-2015 Raphael Assenat <raph@raphnet.net>"
 .ascii "Released under the GPL. See http://www.raphnet.net/electronique/x2wii/index_en.php"
 
 ;
@@ -62,7 +62,7 @@
 
 .text
 .global main
-.global SIG_INTERRUPT0
+.global INT0_vect
 .global gc_rx_buf
 
 
@@ -96,7 +96,7 @@
 #define zl	r30
 #define zh	r31
 
-SIG_INTERRUPT0:
+INT0_vect:
 	in r1, IO_SREG
 	ldi	zl, lo8(gc_rx_buf)
 	ldi zh, hi8(gc_rx_buf)

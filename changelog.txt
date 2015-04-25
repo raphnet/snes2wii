@@ -3,6 +3,9 @@ snes2wii version 1.3
 Source code released under the GPL license. See
 http://www.raphnet.net/electronique/x2wii/index_en.php
 
+Version 1.4: 2015-04-25
+    - Source code updates for newer compilers
+
 Version 1.3: 2013-05-22
 	- Added a feature to swap the NES A and B buttons. Hold A and B at power up to
 	use it.
