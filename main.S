@@ -305,18 +305,14 @@ checkForC:
 
 	; TODO: Is this left or right?
 	ldi r19, 0xff
-	std z+32, r19	; 1
-	std z+33, r19	; 2
-	std z+34, r19	; 3
-	std z+35, r19	; 4
-	std z+36, r19	; 5
-	std z+37, r19	; 6
-	std z+38, r19	; 7
-	std z+39, r19	; 8
-
-
-	ldi r19, 0xff	; this sets msb. enough?
-	std z+32, r19
+	std z+32, r0	; 7 (MSB)
+	std z+33, r0	; 6
+	std z+34, r0	; 5
+	std z+35, r0	; 4
+	std z+36, r0	; 3
+	std z+37, r0	; 2
+	std z+38, r0	; 1
+	std z+39, r19	; 0
 
 
 	rjmp length_branch
