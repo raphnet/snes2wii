@@ -65,6 +65,7 @@
 .global INT0_vect
 .global gc_rx_buf
 
+#define HIGHRATE_POLLING
 
 #define IO_SREG	_SFR_IO_ADDR(SREG)
 #define IO_PORTD _SFR_IO_ADDR(PORTD)
@@ -570,8 +571,12 @@ mainloop:
 	interrupt source is when the gamecube sends us a
 	command. */
 
+#ifdef HIGHRATE_POLLING
+	rcall delay_5ms
+#else
 	tst r3				; set inside int handler
-	breq mainloop;
+;	breq mainloop;
+#endif
 	
 	tst r2			; ==0 snes mode, !=0 nes mode
 	breq doSnes
@@ -840,6 +845,36 @@ delay_16ms_lp:
 	dec r17
 	brne delay_16ms_outer_lp
 delay_16ms_done:
+	pop r17
+	ret
+
+	/*************************************************************
+	 * Subroutine which busy-loops for approx 5ms
+	 *************************************************************/
+delay_5ms: 
+	push r17
+	ldi r17, 32
+delay_5ms_outer_lp:
+	ldi r16, 0xff
+delay_5ms_lp:
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	dec r16
+	brne delay_5ms_lp
+
+	nop
+	nop
+	nop
+	nop
+
+	dec r17
+	brne delay_5ms_outer_lp
+delay_5ms_done:
 	pop r17
 	ret
 	

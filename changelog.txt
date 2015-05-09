@@ -3,6 +3,9 @@ snes2wii version 1.4
 Source code released under the GPL license. See
 http://www.raphnet.net/electronique/x2wii/index_en.php
 
+Version 1.4.1: 2015-05-09
+	- Lowered latency by polling the SNES/NES controller more frequently.
+
 Version 1.4: 2015-04-25
     - Source code updates for newer compilers
 	- Fix the value sent by to simulate C-Stick right moves.
