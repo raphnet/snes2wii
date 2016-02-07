@@ -80,6 +80,9 @@
 #define IO_MCUCR _SFR_IO_ADDR(MCUCR)
 #define IO_GICR	_SFR_IO_ADDR(GICR)
 #define IO_GIFR	_SFR_IO_ADDR(GIFR)
+#define IO_EIFR	_SFR_IO_ADDR(EIFR)
+#define IO_EIMSK _SFR_IO_ADDR(EIMSK)
+
 
 #define CLK_H_LATCH_H	0x30
 #define CLK_H_LATCH_L	0x20
@@ -214,9 +217,16 @@ interrupt_done:
 
 	; Clear the interrupt flag to prevent re-entering the handler right away. When we
 	; transmit data, it triggers interrupts....
+#if defined(__AVR_ATmega8__)
 	ldi r19, 0x40
 	out IO_GIFR, r19
-	
+#elif defined(__AVR_ATmega168__)
+	ldi r19, 0x01
+	out IO_EIFR, r19
+#else
+#error MCU not supported
+#endif
+
 	reti
 
 align_delay:
@@ -506,10 +516,19 @@ main:
 	out IO_DDRD, r16
 
 	/* Configure external interrupt INT0 (falling edge) */
+#if defined(__AVR_ATmega8__)
 	ldi r16, 0x02	/* 0000 0010 */ 
 	out IO_MCUCR, r16
 	ldi r16, 0x40	/* INT0 set */
 	out IO_GICR, r16
+#elif defined(__AVR_ATmega168__)
+	ldi r16, 0x02   /* Setupt falling edge */
+	sts EICRA, r16
+	ldi r16, 0x01   /* INT0 set */
+	out IO_EIMSK, r16
+#else
+#error MCU not supported
+#endif
 
 	/* Read jumpers. 
 	  PB0: Common

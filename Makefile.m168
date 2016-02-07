@@ -1,0 +1,35 @@
+CC=avr-gcc
+AS=$(CC)
+LD=$(CC)
+
+NAME=snes2wii.m168
+CPU=atmega168
+CFLAGS=-Wall -mmcu=$(CPU)
+LDFLAGS=-mmcu=$(CPU) -Wl,-Map=$(NAME).map
+
+OBJS=main.o
+
+all: $(NAME).hex
+
+clean:
+	rm -f $(NAME).elf $(NAME).hex $(OBJS)
+
+$(NAME).elf: $(OBJS)
+	$(LD) $(OBJS) $(LDFLAGS) -o $(NAME).elf
+
+$(NAME).hex: $(NAME).elf
+	avr-objcopy -j .data -j .text -O ihex $(NAME).elf $(NAME).hex
+	avr-size $(NAME).elf
+
+EFUSE=0x01
+LFUSE=0xD7
+HFUSE=0xDC
+
+fuse:
+	avrdude -p m168 -P usb -c avrispmkII -Uhfuse:w:0xc9:m -Ulfuse:w:0x9f:m -B 20.0
+
+flash: $(NAME).hex
+	avrdude -p m168 -P usb -c avrispmkII -Uflash:w:$(NAME).hex -B 1.0
+
+%.o: %.S
+	$(CC) $(CFLAGS) -c $<

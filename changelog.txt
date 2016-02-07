@@ -1,7 +1,10 @@
-snes2wii version 1.4
-(C) 2007-2015 Raphaël Assénat <raph@raphnet.net>
+snes2wii
+(C) 2007-2016 Raphaël Assénat <raph@raphnet.net>
 Source code released under the GPL license. See
 http://www.raphnet.net/electronique/x2wii/index_en.php
+
+Version 1.5 : 2016-02-07
+	- Add ATmega168 support
 
 Version 1.4.1: 2015-05-09
 	- Lowered latency by polling the SNES/NES controller more frequently.
