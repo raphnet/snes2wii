@@ -83,10 +83,8 @@
 #define IO_EIFR	_SFR_IO_ADDR(EIFR)
 #define IO_EIMSK _SFR_IO_ADDR(EIMSK)
 
-
-#define CLK_H_LATCH_H	0x30
-#define CLK_H_LATCH_L	0x20
-#define CLK_L_LATCH_L	0x00
+#define LATCH_BIT		4 /* In PORTC */
+#define CLOCK_BIT		5 /* In PORTC */
 
 #define DEBUG_PORTD_BIT 0x00	/* In PORTD */
 #define GC_DATA_BIT		0x02	/* in PORTD */
@@ -718,12 +716,10 @@ readNes:
 
 
 	/* Latch the buttons output into the shift register */
-	ldi r16, CLK_H_LATCH_H
-	out IO_PORTC, r16
+	sbi IO_PORTC, LATCH_BIT
 	rcall delay_6us
 	rcall delay_6us
-	ldi r16, CLK_H_LATCH_L
-	out IO_PORTC, r16	
+	cbi IO_PORTC, LATCH_BIT
 	rcall delay_6us
 
 	/* Generate 8 clock pulses, reading data on the falling edge */
@@ -773,12 +769,10 @@ readSnes:
 	push r17 ; for r8bits which uses it
 
 	/* Latch the buttons output into the shift register */
-	ldi r16, CLK_H_LATCH_H
-	out IO_PORTC, r16
+	sbi IO_PORTC, LATCH_BIT
 	rcall delay_6us
 	rcall delay_6us
-	ldi r16, CLK_H_LATCH_L
-	out IO_PORTC, r16	
+	cbi IO_PORTC, LATCH_BIT
 	rcall delay_6us
 	
 	/* Generate 8 clock pulses, reading data on the falling edge */
@@ -801,8 +795,7 @@ r8bits:
 r8bits_lp:
 	lsl r18
 
-	ldi r16, CLK_L_LATCH_L
-	out IO_PORTC, r16
+	cbi IO_PORTC, CLOCK_BIT
 
 	in r16, IO_PINC
 	com r16			; snes active low, make bit active high
@@ -814,8 +807,7 @@ r8bits_lp:
 
 	rcall delay_6us
 
-	ldi r16, CLK_H_LATCH_L
-	out IO_PORTC, r16
+	sbi IO_PORTC, CLOCK_BIT
 
 	rcall delay_6us
 
