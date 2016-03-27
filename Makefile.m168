@@ -42,8 +42,11 @@ HFUSE=0xDC
 # 1 : BODLEVEL1    0
 # 0 : BODLEVEL0    0
 
+erase:
+	avrdude -p m168 -P usb -c avrispmkII -e -B 20.0
+
 fuse:
-	avrdude -p m168 -P usb -c avrispmkII -Uhfuse:w:0xc9:m -Ulfuse:w:0x9f:m -B 20.0
+	avrdude -p m168 -P usb -c avrispmkII -Uhfuse:w:$(HFUSE):m -Ulfuse:w:$(LFUSE):m -Uefuse:w:$(EFUSE):m -B 20.0
 
 flash: $(NAME).hex
 	avrdude -p m168 -P usb -c avrispmkII -Uflash:w:$(NAME).hex -B 1.0
