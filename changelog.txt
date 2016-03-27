@@ -3,9 +3,10 @@ snes2wii
 Source code released under the GPL license. See
 http://www.raphnet.net/electronique/x2wii/index_en.php
 
-Version 1.? : 2016-03-??
+Version 1.5.1 : 2016-03-26
 	- Fixed a long standing bug where random button press would occur when no
-	controller (NES/SNES) was present.
+	  controller (NES/SNES) was present.
+	- Corrected fuse values in Atmega168 makefile
 
 Version 1.5 : 2016-02-07
 	- Add ATmega168 support

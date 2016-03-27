@@ -1,5 +1,5 @@
 .data
-.ascii "Snes2Wii version 1.4, (C) 2007-2015 Raphael Assenat <raph@raphnet.net>"
+.ascii "Snes2Wii version 1.5,1 (C) 2007-2016 Raphael Assenat <raph@raphnet.net>"
 .ascii "Released under the GPL. See http://www.raphnet.net/electronique/x2wii/index_en.php"
 
 ;
